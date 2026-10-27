@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: yixue-music-v2
+    env: node
+    region: singapore
+    plan: free
+    buildCommand: cd frontend && npm install && npm run build && cd ../backend && npm install
+    startCommand: cd backend && node server.js
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "10000"
+      # TURN 中继（可选）：在 Render 控制台把这三个变量填上就能启用，
+      # 不填则只用 STUN。见 frontend/.env.example
+      # - key: VITE_TURN_URL
+      #   sync: false
+      # - key: VITE_TURN_USER
+      #   sync: false
+      # - key: VITE_TURN_PASS
+      #   sync: false

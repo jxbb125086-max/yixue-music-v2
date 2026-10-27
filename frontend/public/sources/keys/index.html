@@ -1,0 +1,1316 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>钢琴琴键可视化 · MIDI 实时高亮</title>
+<style>
+  :root{--accent:#ffb84d;--panel:rgba(18,22,28,.9);--line:rgba(255,255,255,.1);--text:#e9ecf2;--dim:#9aa3b2}
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;overflow:hidden}
+  body{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","PingFang SC","Helvetica Neue",sans-serif;color:var(--text);background:#0f1216;transition:background .25s}
+  body.bg-light{background:#eef0f3;color:#23262c;--panel:rgba(255,255,255,.93);--line:rgba(0,0,0,.1);--dim:#5c636e}
+  body.bg-green{background:#00b140}
+  body.bg-trans{background:rgba(10,12,16,.55)}
+  #stage{position:fixed;inset:0}
+  canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer}
+  #panel{position:fixed;top:14px;left:14px;width:258px;max-height:calc(100% - 28px);overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);font-size:12px;line-height:1.5;box-shadow:0 8px 30px rgba(0,0,0,.35);z-index:10}
+  #panel h1{font-size:13px;font-weight:600;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center}
+  #panel label{display:block;margin:9px 0 3px;color:var(--dim)}
+  #panel select,#panel input[type=number]{width:100%;padding:5px 7px;border-radius:7px;border:1px solid var(--line);background:rgba(128,128,128,.12);color:inherit;font-size:12px}
+  .row{display:flex;gap:12px;align-items:center;margin-top:8px;flex-wrap:wrap}
+  .row label{margin:0;display:flex;gap:5px;align-items:center;color:var(--text)}
+  .btn{margin-top:10px;width:100%;padding:6px;border:1px solid var(--line);border-radius:7px;background:rgba(128,128,128,.14);color:inherit;font-size:12px;cursor:pointer}
+  .btn:hover{background:rgba(128,128,128,.24)}
+  #status{margin-top:10px;padding:8px;border-radius:8px;background:rgba(128,128,128,.1);color:var(--dim);font-size:11px}
+  #status b{color:var(--accent);font-weight:600}
+  .hint{margin-top:9px;color:var(--dim);font-size:11px;line-height:1.6}
+  #showBtn{position:fixed;right:14px;bottom:14px;z-index:10;padding:7px 12px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:inherit;font-size:12px;cursor:pointer;display:none;backdrop-filter:blur(12px)}
+  #custom{display:none;gap:8px;margin-top:6px}
+  #custom input{width:50%}
+</style>
+</head>
+<body class="bg-dark">
+<div id="stage"><canvas id="kb"></canvas></div>
+
+<div id="panel">
+  <h1>钢琴琴键可视化 <span id="hideBtn" style="cursor:pointer;color:var(--dim);font-weight:400">隐藏(H)</span></h1>
+  <label>MIDI 设备</label>
+  <select id="devSel"><option value="">（未检测到设备）</option></select>
+  <label>键盘风格</label>
+  <select id="styleSel">
+    <option value="real">真实象牙（推荐）</option>
+    <option value="flat">简约平面</option>
+    <option value="neon">霓虹暗色</option>
+  </select>
+  <label>音域</label>
+  <select id="rangeSel">
+    <option value="36,61">C2 – C7（61键，推荐）</option>
+    <option value="21,88">A0 – C8（88键全音域）</option>
+    <option value="48,49">C3 – C6（49键）</option>
+    <option value="60,25">C4 – C6（25键，窄屏用）</option>
+    <option value="custom">自定义…</option>
+  </select>
+  <div id="custom"><input type="number" id="startNum" value="36" min="21" max="108"><input type="number" id="countNum" value="61" min="12" max="88"></div>
+  <div class="row">
+    <label><input type="checkbox" id="cbJianpu" checked>简谱</label>
+    <label><input type="checkbox" id="cbNames">音名</label>
+    <label><input type="checkbox" id="cbFrame">琴身</label>
+  </div>
+  <div class="row">
+    <label><input type="checkbox" id="cbBar">上方简谱条（高亮显示正在弹的音）</label>
+  </div>
+  <div id="barOpts">
+    <label>简谱条高度</label>
+    <select id="barScaleSel">
+      <option value="0.20">紧凑（琴键最长）</option>
+      <option value="0.26">标准</option>
+      <option value="0.34">高</option>
+    </select>
+    <label>光柱颜色</label>
+    <select id="barModeSel">
+      <option value="random">随机（每个琴键一种颜色）</option>
+      <option value="shuffle">随机变色（弹着弹着换色）</option>
+      <option value="solid">自定义单色</option>
+    </select>
+    <button class="btn" id="barReroll" style="margin-top:0">换一批颜色</button>
+    <div class="row" style="margin-top:0">
+      <input type="color" id="barColorSel" value="#ffb84d" style="flex:1;height:26px;border:1px solid var(--line);border-radius:7px;background:none">
+      <button class="btn" id="barColorReset" style="margin:0;width:auto;padding:5px 9px;font-size:11px">跟随高亮色</button>
+    </div>
+  </div>
+  <label>背景</label>
+  <select id="bgSel">
+    <option value="dark">深色（默认）</option>
+    <option value="green">绿幕（OBS色度键）</option>
+    <option value="trans">半透明叠加</option>
+    <option value="light">浅色</option>
+  </select>
+  <label>高亮色</label>
+  <input type="color" id="colorSel" value="#ffb84d" style="width:100%;height:26px;border:1px solid var(--line);border-radius:7px;background:none">
+  <button class="btn" id="allOffBtn">全部抬键（Panic）</button>
+  <div id="status">初始化中…</div>
+  <div class="hint">
+    用法：<br>
+    1. 用 Chrome / Edge 打开（Safari 不支持 Web MIDI）<br>
+    2. MIDI 键盘插上后在上方选设备<br>
+    3. 直播：OBS「窗口采集」本窗口；绿幕背景配「色度键」<br>
+    4. 快捷键：H 显隐面板，F 全屏；无 MIDI 时可用鼠标点键试弹
+  </div>
+</div>
+<button id="showBtn">显示面板(H)</button>
+
+<script>
+'use strict';
+/* ---------- 设置 ---------- */
+var LS_KEY = 'pianoKeysViz.settings';
+var settings = {
+  startNote: 36, keyCount: 61,
+  showJianpu: true, showNames: false, bodyFrame: false, showBar: false,
+  barColor: '#ffb84d', barScale: 0.26, barMode: 'random', barSeed: Math.random() * 360,
+  style: 'real', bg: 'dark', accent: '#ffb84d', deviceId: '',
+  panel: true
+};
+// midiHost 故意不放进 settings：settings 会被写进 localStorage，
+// 一旦被污染，独立用 Chrome 打开本页时也会跳过 MIDI 订阅（琴键就不响了）
+var midiHostMode = false;
+try {
+  var saved = JSON.parse(localStorage.getItem(LS_KEY) || '{}');
+  for (var sk in saved) if (saved.hasOwnProperty(sk)) settings[sk] = saved[sk];
+} catch (e) {}
+// 旧版本存的是 'rainbow'，迁移到 'random'
+if (settings.barMode === 'rainbow') settings.barMode = 'random';
+if (typeof settings.barSeed !== 'number' || !isFinite(settings.barSeed)) settings.barSeed = Math.random() * 360;
+function saveSettings() { try { localStorage.setItem(LS_KEY, JSON.stringify(settings)); } catch (e) {} }
+
+/* ---------- 常量与调色板 ---------- */
+var BLACK_PC = {1:1, 3:1, 6:1, 8:1, 10:1};
+var JP_LABEL = ['1','#1','2','#2','3','4','#4','5','#5','6','#6','7'];
+var NOTE_NAME = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+
+var PALETTES = {
+  real: {
+    whiteTop:'#fefdfa', whiteMid:'#f6f4ec', whiteBot:'#e6e1d2',
+    whiteFaceTop:'#d9d3c3', whiteFaceBot:'#b6af9d',
+    label:'#2b2e35', nameColor:'rgba(70,74,82,.5)',
+    blackTop:'#343a44', blackMid:'#1a1e25', blackBot:'#0e1116',
+    blackLabel:'rgba(238,242,248,.55)',
+    felt:true, lip:true, grain:true, shadow:true, gloss:true,
+    frame:{top:'#4b2f1c', mid:'#3a2415', bot:'#231409', side:'#3f2716', side2:'#2a1a0e', rim:'rgba(255,214,170,.20)'}
+  },
+  flat: {
+    whiteTop:'#ffffff', whiteMid:'#f8f8f6', whiteBot:'#eae8e1',
+    whiteFaceTop:'#dedbd2', whiteFaceBot:'#c9c5b9',
+    label:'#2b2e35', nameColor:'rgba(70,74,82,.5)',
+    blackTop:'#2d323a', blackMid:'#191d23', blackBot:'#0d1014',
+    blackLabel:'rgba(235,238,245,.5)',
+    felt:false, lip:true, grain:false, shadow:false, gloss:false,
+    frame:{top:'#8d9198', mid:'#767a81', bot:'#5c6067', side:'#83878e', side2:'#6a6e75', rim:'rgba(255,255,255,.35)'}
+  },
+  neon: {
+    whiteTop:'#232a34', whiteMid:'#1b212a', whiteBot:'#141920',
+    whiteFaceTop:'#10151b', whiteFaceBot:'#0a0e13',
+    label:'#d7deea', nameColor:'rgba(180,192,210,.45)',
+    blackTop:'#151a21', blackMid:'#0d1117', blackBot:'#070a0e',
+    blackLabel:'rgba(190,205,225,.5)',
+    felt:false, lip:true, grain:false, shadow:true, gloss:true,
+    frame:{top:'#1b222b', mid:'#121820', bot:'#080b10', side:'#1a2029', side2:'#0d1218', rim:'rgba(120,200,255,.22)'}
+  }
+};
+
+/* ---------- URL 参数（供排版台 webview 内嵌时免手动设置） ----------
+   例：?style=real&bg=dark&jianpu=1&names=0&frame=1&range=36,61&accent=ffb84d&panel=0
+   注意：带参数时只在本次会话生效，不写回 localStorage，避免污染独立使用时的设置。 */
+(function applyQuery() {
+  var q = {};
+  try {
+    var sp = new URLSearchParams(location.search);
+    sp.forEach(function (v, k) { q[k] = v; });
+  } catch (e) { return; }
+  if (q.style && PALETTES[q.style]) settings.style = q.style;
+  if (q.bg) settings.bg = q.bg;
+  if (q.jianpu != null) settings.showJianpu = q.jianpu !== '0' && q.jianpu !== 'false';
+  if (q.names != null) settings.showNames = q.names === '1' || q.names === 'true';
+  if (q.frame != null) settings.bodyFrame = q.frame === '1' || q.frame === 'true';
+  if (q.bar != null) settings.showBar = q.bar === '1' || q.bar === 'true';
+  if (q.panel != null) settings.panel = q.panel !== '0' && q.panel !== 'false';
+  if (q.accent) settings.accent = '#' + String(q.accent).replace(/^#/, '');
+  if (q.barColor) settings.barColor = '#' + String(q.barColor).replace(/^#/, '');
+  if (q.barMode && (q.barMode === 'random' || q.barMode === 'shuffle' || q.barMode === 'solid')) settings.barMode = q.barMode;
+  if (q.midiHost != null) midiHostMode = (q.midiHost === '1' || q.midiHost === 'true');
+  if (q.barH != null) {
+    var bhv = parseFloat(q.barH);
+    if (!isNaN(bhv) && bhv >= 0.15 && bhv <= 0.5) settings.barScale = bhv;
+  }
+  if (q.range) {
+    var p = String(q.range).split(',');
+    var s = parseInt(p[0], 10), c = parseInt(p[1], 10);
+    if (s >= 21 && s <= 108) settings.startNote = s;
+    if (c >= 12 && c <= 88) settings.keyCount = c;
+  }
+})();
+
+/* ---------- DOM ---------- */
+var canvas = document.getElementById('kb');
+var ctx = canvas.getContext('2d');
+var staticCanvas = document.createElement('canvas');
+var sctx = staticCanvas.getContext('2d');
+var panel = document.getElementById('panel');
+var showBtn = document.getElementById('showBtn');
+var statusEl = document.getElementById('status');
+var devSel = document.getElementById('devSel');
+var rangeSel = document.getElementById('rangeSel');
+var styleSel = document.getElementById('styleSel');
+var customDiv = document.getElementById('custom');
+var startNum = document.getElementById('startNum');
+var countNum = document.getElementById('countNum');
+var cbJianpu = document.getElementById('cbJianpu');
+var cbNames = document.getElementById('cbNames');
+var cbFrame = document.getElementById('cbFrame');
+var cbBar = document.getElementById('cbBar');
+var barScaleSel = document.getElementById('barScaleSel');
+var barModeSel = document.getElementById('barModeSel');
+var barColorSel = document.getElementById('barColorSel');
+var barOpts = document.getElementById('barOpts');
+var bgSel = document.getElementById('bgSel');
+var colorSel = document.getElementById('colorSel');
+
+/* ---------- 状态 ---------- */
+var keys = [];
+var whiteCount = 1;
+var active = {};
+var sustained = {};
+var release = {};
+var sustainOn = false;
+var keyRects = [];
+var midiAccess = null;
+var noisePattern = null;
+
+/* ---------- 工具 ---------- */
+function hexRgb(h) {
+  h = String(h).replace('#', '');
+  if (h.length === 3) h = h[0]+h[0]+h[1]+h[1]+h[2]+h[2];
+  var n = parseInt(h, 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+function mix(ha, hb, t) {
+  if (t <= 0) return ha;
+  var A = hexRgb(ha), B = hexRgb(hb);
+  return 'rgb(' + Math.round(A[0]+(B[0]-A[0])*t) + ',' + Math.round(A[1]+(B[1]-A[1])*t) + ',' + Math.round(A[2]+(B[2]-A[2])*t) + ')';
+}
+function rgbaOf(h, a) {
+  var c = hexRgb(h);
+  return 'rgba(' + c[0] + ',' + c[1] + ',' + c[2] + ',' + a.toFixed(3) + ')';
+}
+function rr(g, x, y, w, h, r) {
+  r = Math.max(0, Math.min(r, w/2, h/2));
+  g.beginPath();
+  g.moveTo(x+r, y);
+  g.arcTo(x+w, y, x+w, y+h, r);
+  g.arcTo(x+w, y+h, x, y+h, r);
+  g.arcTo(x, y+h, x, y, r);
+  g.arcTo(x, y, x+w, y, r);
+  g.closePath();
+}
+// 上圆下窄的块：像一颗落下来的音符头，底边贴着琴键
+function rrV(g, x, y, w, h, rTop, rBot) {
+  rTop = Math.max(0, Math.min(rTop, w / 2, h / 2));
+  rBot = Math.max(0, Math.min(rBot, w / 2, h / 2));
+  g.beginPath();
+  g.moveTo(x + rTop, y);
+  g.lineTo(x + w - rTop, y);
+  g.arcTo(x + w, y, x + w, y + rTop, rTop);
+  g.lineTo(x + w, y + h - rBot);
+  g.arcTo(x + w, y + h, x + w - rBot, y + h, rBot);
+  g.lineTo(x + rBot, y + h);
+  g.arcTo(x, y + h, x, y + h - rBot, rBot);
+  g.lineTo(x, y + rTop);
+  g.arcTo(x, y, x + rTop, y, rTop);
+  g.closePath();
+}
+function jianpuOf(midi) {
+  var pc = ((midi % 12) + 12) % 12;
+  var oct = Math.floor(midi / 12) - 1;
+  return { label: JP_LABEL[pc], rel: oct - 4, pc: pc, oct: oct };
+}
+function inRange(midi) { return midi >= settings.startNote && midi < settings.startNote + settings.keyCount; }
+function pal() { return PALETTES[settings.style] || PALETTES.real; }
+
+/* ---------- 键位 ---------- */
+function buildKeys() {
+  keys = [];
+  var wi = -1;
+  for (var m = settings.startNote; m < settings.startNote + settings.keyCount; m++) {
+    var pc = ((m % 12) + 12) % 12;
+    if (BLACK_PC[pc]) keys.push({ midi: m, black: true, whiteIdx: wi });
+    else { wi++; keys.push({ midi: m, black: false, whiteIdx: wi }); }
+  }
+  whiteCount = Math.max(1, wi + 1);
+}
+
+/* ---------- 几何 ---------- */
+function geom() {
+  var W = canvas.clientWidth || 1, H = canvas.clientHeight || 1;
+  var P = pal();
+  var feltH = P.felt ? Math.max(6, Math.min(16, H * 0.038)) : 0;
+  var lipH = P.lip ? Math.max(7, Math.min(22, H * 0.05)) : 0;
+  var whiteW = W / whiteCount;
+  // 上方简谱条占的高度（开启时琴键整体下移）；比例可在面板里调，默认 30%
+  var barScale = settings.barScale > 0 ? settings.barScale : 0.26;
+  var barH = settings.showBar ? Math.round(Math.max(36, H * barScale)) : 0;
+  if (barH > H * 0.5) barH = Math.round(H * 0.5);
+  var availH = H - barH;
+  // 真实琴键 深:宽 约 7~8:1，键深超过就封顶并垂直居中，避免瘦长失真
+  var maxDepth = whiteW * 8.4;
+  var blockH = Math.min(availH, maxDepth + feltH + lipH);
+  // 框比琴键需要的更「高」时（方框/竖框），把多出来的空间优先给琴键（最多拉到 16:1），
+  // 剩下的才让简谱条长大一点，避免框内上下留出大片黑边
+  var spare = availH - blockH;
+  if (spare > 4) {
+    var growKeys = Math.min(spare, Math.max(0, whiteW * 16 - maxDepth));
+    blockH += growKeys;
+    spare -= growKeys;
+    if (spare > 4) {
+      var barCap = Math.round(H * 0.32);
+      barH += Math.max(0, Math.min(spare, barCap - barH));
+    }
+  }
+  var offsetY = barH + Math.max(0, (H - barH - blockH) / 2);
+  var keyTop = offsetY + feltH;
+  var keyBottom = offsetY + blockH - lipH;
+  return {
+    W: W, H: H, feltH: feltH, lipH: lipH, barH: barH,
+    whiteW: whiteW,
+    offsetY: offsetY,
+    blockBottom: offsetY + blockH,
+    keyTop: keyTop,
+    keyBottom: keyBottom,
+    blackW: whiteW * 0.60,
+    blackBottom: keyTop + (keyBottom - keyTop) * 0.62
+  };
+}
+
+/* ---------- 纹理 ---------- */
+function makeNoise() {
+  var n = document.createElement('canvas');
+  n.width = 96; n.height = 96;
+  var nc = n.getContext('2d');
+  var img = nc.createImageData(96, 96);
+  for (var i = 0; i < img.data.length; i += 4) {
+    var v = 110 + Math.random() * 130;
+    img.data[i] = v; img.data[i+1] = v; img.data[i+2] = v;
+    img.data[i+3] = Math.random() * 22;
+  }
+  nc.putImageData(img, 0, 0);
+  noisePattern = sctx.createPattern(n, 'repeat');
+}
+
+/* ---------- 画布尺寸 ---------- */
+function resize() {
+  var dpr = window.devicePixelRatio || 1;
+  var w = canvas.clientWidth, h = canvas.clientHeight;
+  canvas.width = Math.max(1, Math.round(w * dpr));
+  canvas.height = Math.max(1, Math.round(h * dpr));
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  staticCanvas.width = canvas.width;
+  staticCanvas.height = canvas.height;
+  sctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  rebuildStatic();
+}
+window.addEventListener('resize', resize);
+
+/* ---------- 音符状态 ---------- */
+function noteOn(midi, vel) {
+  if (!inRange(midi)) return;
+  active[midi] = { vel: Math.max(1, vel || 90), t0: performance.now() };
+  delete sustained[midi];
+  delete release[midi];
+  updateStatus();
+}
+function noteOff(midi) {
+  if (!active[midi]) return;
+  delete active[midi];
+  if (sustainOn) sustained[midi] = true;
+  else release[midi] = performance.now();
+  updateStatus();
+}
+function setSustain(on) {
+  if (sustainOn === on) return;
+  sustainOn = on;
+  if (!on) {
+    var now = performance.now();
+    for (var m in sustained) release[m] = now;
+    sustained = {};
+  }
+  updateStatus();
+}
+function allNotesOff() {
+  var now = performance.now();
+  for (var m in active) release[m] = now;
+  active = {}; sustained = {};
+  updateStatus();
+}
+function intensityOf(midi, now) {
+  if (active[midi]) return 0.55 + 0.45 * (active[midi].vel / 127);
+  if (sustained[midi]) return 0.42;
+  if (release[midi] !== undefined) {
+    var f = 1 - (now - release[midi]) / 260;
+    if (f <= 0) { delete release[midi]; return 0; }
+    return 0.5 * f;
+  }
+  return 0;
+}
+
+/* ================= 绘制：白键 ================= */
+function drawWhiteKey(g, k, geo, P, press) {
+  var w = geo.whiteW;
+  var x = k.whiteIdx * w;
+  var top = geo.keyTop + press * 1.5;
+  var bot = geo.keyBottom + press * 3.5;
+  var accent = settings.accent;
+  var gap = Math.max(0.5, w * 0.008);
+  var ix = x + gap, iw = w - gap * 2;
+
+  g.save();
+
+  // 按下时把压在白键上的黑键挖掉：高亮只留在琴键可见的地方，绝不盖住黑键
+  if (press > 0.01) {
+    g.beginPath();
+    g.rect(x, geo.keyTop, w, geo.blockBottom - geo.keyTop);
+    for (var bi = 0; bi < keys.length; bi++) {
+      var bk = keys[bi];
+      if (!bk.black) continue;
+      var bx = (bk.whiteIdx + 1) * geo.whiteW - geo.blackW / 2;
+      if (bx + geo.blackW <= x + 0.5 || bx >= x + w - 0.5) continue;
+      g.rect(bx, geo.keyTop, geo.blackW, geo.blackBottom - geo.keyTop);
+    }
+    g.clip('evenodd');
+  }
+
+  // 键面（象牙）
+  var grad = g.createLinearGradient(0, top, 0, bot);
+  grad.addColorStop(0, P.whiteTop);
+  grad.addColorStop(0.42, P.whiteMid);
+  grad.addColorStop(1, P.whiteBot);
+  if (press > 0.01) { g.shadowColor = rgbaOf(accent, 0.45 * press); g.shadowBlur = 16 * press; }
+  g.fillStyle = grad;
+  g.fillRect(ix, top, iw, bot - top);
+  g.shadowBlur = 0;
+
+  // 象牙纹理
+  if (P.grain && noisePattern) {
+    g.save(); g.globalAlpha = 0.06; g.fillStyle = noisePattern;
+    g.fillRect(ix, top + 1, iw, bot - top - 1); g.restore();
+  }
+
+  // 象牙细纹（竖向，极淡）
+  if (P.grain) {
+    g.save();
+    g.globalAlpha = 0.045;
+    g.strokeStyle = '#7d7259';
+    g.lineWidth = 1;
+    var hgt = bot - top;
+    for (var gi = 1; gi <= 2; gi++) {
+      var gx = ix + iw * (gi / 3) + (gi === 2 ? 1.2 : -1.2);
+      g.beginPath();
+      g.moveTo(gx, top + hgt * 0.18);
+      g.lineTo(gx + 0.6, bot - hgt * 0.12);
+      g.stroke();
+    }
+    g.restore();
+  }
+
+  // 顶部柔光
+  var sheen = g.createLinearGradient(0, top, 0, top + (bot - top) * 0.42);
+  sheen.addColorStop(0, 'rgba(255,255,255,' + (0.34 * (1 - press * 0.5)).toFixed(3) + ')');
+  sheen.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = sheen;
+  g.fillRect(ix, top, iw, (bot - top) * 0.42);
+
+  // 按下：暖光从键面下方渗上来 + 一圈会发光的内嵌高亮框
+  if (press > 0.01) {
+    // 光从底部往上渗：越靠近琴键前沿越亮，像光从键缝里透出来
+    var wash = g.createLinearGradient(0, top, 0, bot);
+    wash.addColorStop(0, rgbaOf(accent, 0.03 * press));
+    wash.addColorStop(0.55, rgbaOf(accent, 0.08 * press));
+    wash.addColorStop(1, rgbaOf(accent, 0.17 * press));
+    g.fillStyle = wash;
+    g.fillRect(ix, top, iw, bot - top);
+
+    // 键面顶部被上方简谱条照亮的一小片
+    var topLit = g.createLinearGradient(0, top, 0, top + Math.min(14, (bot - top) * 0.14));
+    topLit.addColorStop(0, rgbaOf(accent, 0.20 * press));
+    topLit.addColorStop(1, rgbaOf(accent, 0));
+    g.fillStyle = topLit;
+    g.fillRect(ix, top, iw, Math.min(14, (bot - top) * 0.14));
+
+    // 内凹阴影，键看起来是"按下去"的
+    var recess = g.createLinearGradient(0, top, 0, top + Math.min(18, (bot - top) * 0.18));
+    recess.addColorStop(0, 'rgba(0,0,0,' + (0.26 * press).toFixed(3) + ')');
+    recess.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = recess;
+    g.fillRect(ix, top, iw, Math.min(18, (bot - top) * 0.18));
+
+    // 高亮框：内缩在琴键里，用 shadowBlur 做向内衰减的柔光（真发光，不是一条实心带），
+    // 再压一根白色芯线，看起来像一根点亮的灯管
+    var inset = Math.max(2.5, iw * 0.15);
+    var lw = Math.max(1.6, Math.min(2.6, iw * 0.085));
+    var fw = iw - inset * 2, fh = (bot - top) - inset * 2;
+    g.save();
+    g.shadowColor = rgbaOf(accent, 0.85 * press);
+    g.shadowBlur = Math.max(6, lw * 3.4);
+    g.strokeStyle = rgbaOf(accent, 0.88 * press);
+    g.lineWidth = lw;
+    rr(g, ix + inset, top + inset, fw, fh, 3);
+    g.stroke();
+    g.restore();
+    g.strokeStyle = 'rgba(255,255,255,' + (0.32 * press).toFixed(3) + ')';
+    g.lineWidth = Math.max(0.8, lw * 0.42);
+    rr(g, ix + inset, top + inset, fw, fh, 3);
+    g.stroke();
+  }
+
+  // 毛毡投影
+  if (P.felt) {
+    var fs = g.createLinearGradient(0, top, 0, top + Math.min(12, (bot - top) * 0.14));
+    fs.addColorStop(0, 'rgba(20,10,6,.30)');
+    fs.addColorStop(1, 'rgba(20,10,6,0)');
+    g.fillStyle = fs;
+    g.fillRect(ix, top, iw, Math.min(12, (bot - top) * 0.14));
+  }
+
+  // 左缝（渐变柔化）+ 内侧倒角高光
+  var lseam = g.createLinearGradient(x, 0, x + Math.max(3, gap * 3), 0);
+  lseam.addColorStop(0, 'rgba(0,0,0,.30)');
+  lseam.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = lseam;
+  g.fillRect(x, top, Math.max(3, gap * 3), bot - top);
+  g.fillStyle = 'rgba(255,255,255,.42)';
+  g.fillRect(x + Math.max(1, gap), top, 1, bot - top);
+  var seam = g.createLinearGradient(x + w - Math.max(4, w * 0.16), 0, x + w, 0);
+  seam.addColorStop(0, 'rgba(0,0,0,0)');
+  seam.addColorStop(1, 'rgba(0,0,0,.24)');
+  g.fillStyle = seam;
+  g.fillRect(x + w - Math.max(4, w * 0.16), top, Math.max(4, w * 0.16), bot - top);
+
+  // 前沿（按下时变亮边，未按时为高光）
+  if (press > 0.01) {
+    g.fillStyle = rgbaOf(accent, 0.62 * press);
+    g.fillRect(ix, bot - Math.max(1.5, w * 0.014), iw, Math.max(1.5, w * 0.014));
+  } else {
+    g.fillStyle = 'rgba(255,255,255,.62)';
+    g.fillRect(ix + 1, bot - Math.max(1, w * 0.012), iw - 2, Math.max(1, w * 0.012));
+  }
+
+  // 前脸（键的立面，产生厚度；按下时变矮）
+  if (P.lip && geo.lipH > 0) {
+    var fg = g.createLinearGradient(0, bot, 0, geo.blockBottom);
+    fg.addColorStop(0, press > 0.01 ? mix(P.whiteFaceTop, accent, 0.28 * press) : P.whiteFaceTop);
+    fg.addColorStop(1, press > 0.01 ? mix(P.whiteFaceBot, accent, 0.20 * press) : P.whiteFaceBot);
+    g.fillStyle = fg;
+    g.fillRect(ix, bot, iw, geo.blockBottom - bot);
+    g.fillStyle = 'rgba(255,255,255,.40)';
+    g.fillRect(ix + 1, bot, iw - 2, 1);
+    g.fillStyle = 'rgba(0,0,0,.14)';
+    g.fillRect(x, bot, Math.max(1, gap), geo.blockBottom - bot);
+    g.fillRect(x + w - Math.max(1, gap), bot, Math.max(1, gap), geo.blockBottom - bot);
+  }
+
+  g.restore();
+}
+
+/* ================= 绘制：黑键 ================= */
+function drawBlackKey(g, k, geo, P, press) {
+  var w = geo.blackW;
+  var x = (k.whiteIdx + 1) * geo.whiteW - w / 2;
+  var top = geo.keyTop + press * 2;
+  var bot = geo.blackBottom + press * 3.5;
+  var accent = settings.accent;
+  var h = bot - top;
+  var faceH = Math.min(7, Math.max(3, h * 0.11));
+  var bodyH = h - faceH;
+
+  // 投射到白键上的阴影
+  if (P.shadow) {
+    g.save();
+    g.shadowColor = 'rgba(0,0,0,.5)';
+    g.shadowBlur = 6;
+    g.shadowOffsetX = 1.5;
+    g.shadowOffsetY = 3.5;
+    g.fillStyle = '#000';
+    rr(g, x, top, w, bodyH, 3);
+    g.fill();
+    g.restore();
+  }
+
+  g.save();
+  if (press > 0.01) { g.shadowColor = rgbaOf(accent, 0.55 * press); g.shadowBlur = 15 * press; }
+  var grad = g.createLinearGradient(0, top, 0, bot - faceH);
+  grad.addColorStop(0, P.blackTop);
+  grad.addColorStop(0.55, P.blackMid);
+  grad.addColorStop(1, P.blackBot);
+  g.fillStyle = grad;
+  rr(g, x, top, w, bodyH, 3);
+  g.fill();
+  g.shadowBlur = 0;
+
+  // 按下：暖光从上往下渗 + 一圈会发光的轮廓，黑键在暗底上一眼就能看到
+  if (press > 0.01) {
+    var wash = g.createLinearGradient(0, top, 0, bot - faceH);
+    wash.addColorStop(0, rgbaOf(accent, 0.24 * press));
+    wash.addColorStop(0.55, rgbaOf(accent, 0.13 * press));
+    wash.addColorStop(1, rgbaOf(accent, 0.08 * press));
+    g.fillStyle = wash;
+    rr(g, x, top, w, bodyH, 3);
+    g.fill();
+
+    // 轮廓：shadowBlur 做一圈向外的柔光，再压一根亮边 + 白芯
+    g.save();
+    g.shadowColor = rgbaOf(accent, 0.70 * press);
+    g.shadowBlur = 7;
+    g.strokeStyle = rgbaOf(accent, 0.85 * press);
+    g.lineWidth = 1.1;
+    rr(g, x + 0.9, top + 0.9, w - 1.8, bodyH - 1.8, 2.4);
+    g.stroke();
+    g.restore();
+    g.strokeStyle = 'rgba(255,255,255,' + (0.22 * press).toFixed(3) + ')';
+    g.lineWidth = 0.7;
+    rr(g, x + 1.4, top + 1.4, w - 2.8, bodyH - 2.8, 2.2);
+    g.stroke();
+
+    // 键顶一条被上方光带照亮的边
+    g.fillStyle = rgbaOf(accent, 0.60 * press);
+    g.fillRect(x + 2, top + 0.5, w - 4, 1.2);
+  }
+
+  // 顶部镜面高光
+  if (P.gloss) {
+    var sp = g.createLinearGradient(0, top + 1, 0, top + bodyH * 0.38);
+    sp.addColorStop(0, 'rgba(255,255,255,' + (0.20 * (1 - press * 0.4)).toFixed(3) + ')');
+    sp.addColorStop(0.55, 'rgba(255,255,255,.03)');
+    sp.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = sp;
+    rr(g, x + 1, top + 1, w - 2, bodyH * 0.38, 2);
+    g.fill();
+  }
+  // 左缘高光 / 右缘暗边
+  g.fillStyle = 'rgba(255,255,255,.13)';
+  g.fillRect(x + 1, top + 2, 1, bodyH - 4);
+  g.fillStyle = 'rgba(0,0,0,.35)';
+  g.fillRect(x + w - 1.5, top + 2, 1.5, bodyH - 4);
+
+  // 前脸
+  var fg = g.createLinearGradient(0, bot - faceH, 0, bot);
+  fg.addColorStop(0, press > 0.01 ? rgbaOf(accent, 0.35 * press) : 'rgba(255,255,255,.09)');
+  fg.addColorStop(0.3, 'rgba(0,0,0,.42)');
+  fg.addColorStop(1, 'rgba(0,0,0,.62)');
+  g.fillStyle = fg;
+  rr(g, x, bot - faceH, w, faceH, 3);
+  g.fill();
+  g.restore();
+}
+
+/* ================= 绘制：标签 ================= */
+function drawWhiteLabel(g, k, geo, P) {
+  var jp = jianpuOf(k.midi);
+  var w = geo.whiteW;
+  var x = k.whiteIdx * w + w / 2;
+  var span = geo.keyBottom - geo.keyTop;
+  var numY = geo.keyBottom - Math.max(13, span * 0.16);
+  if (settings.showJianpu) {
+    var fs = Math.max(9, Math.min(26, w * 0.46));
+    g.font = '600 ' + fs.toFixed(1) + 'px -apple-system, "SF Pro Display", "PingFang SC", sans-serif';
+    g.textAlign = 'center';
+    g.fillStyle = P.label;
+    g.fillText(jp.label, x, numY);
+    if (jp.rel !== 0 && w >= 20) {
+      var n = Math.abs(jp.rel);
+      for (var i = 0; i < n; i++) {
+        var dy = jp.rel > 0 ? numY - fs * 0.92 - i * fs * 0.34 : numY + fs * 0.5 + i * fs * 0.34;
+        g.beginPath();
+        g.arc(x, dy, Math.max(1.1, w * 0.042), 0, Math.PI * 2);
+        g.fill();
+      }
+    }
+  }
+  if (settings.showNames && w >= 26) {
+    g.font = '500 ' + Math.max(8, Math.min(11, w * 0.19)).toFixed(1) + 'px -apple-system, sans-serif';
+    g.textAlign = 'center';
+    g.fillStyle = P.nameColor;
+    g.fillText(NOTE_NAME[jp.pc] + jp.oct, x, geo.keyBottom - 3);
+  }
+}
+function drawBlackLabel(g, k, geo, P) {
+  if (!settings.showJianpu) return;
+  var w = geo.blackW;
+  if (w < 15) return;
+  var jp = jianpuOf(k.midi);
+  var x = (k.whiteIdx + 1) * geo.whiteW - w / 2 + w / 2;
+  var y = geo.blackBottom - Math.max(7, (geo.blackBottom - geo.keyTop) * 0.13);
+  g.font = '600 ' + Math.min(11, w * 0.42).toFixed(1) + 'px -apple-system, "PingFang SC", sans-serif';
+  g.textAlign = 'center';
+  g.fillStyle = P.blackLabel;
+  g.fillText(jp.label, x, y);
+}
+
+/* ================= 绘制：毛毡与琴身 ================= */
+function drawFelt(g, geo) {
+  var y = geo.offsetY;
+  var grad = g.createLinearGradient(0, y, 0, y + geo.feltH);
+  grad.addColorStop(0, '#7d1c20');
+  grad.addColorStop(0.55, '#96262a');
+  grad.addColorStop(1, '#5a1114');
+  g.fillStyle = grad;
+  g.fillRect(0, y, geo.W, geo.feltH);
+  g.fillStyle = 'rgba(0,0,0,.35)';
+  g.fillRect(0, y + geo.feltH - 1, geo.W, 1);
+  g.fillStyle = 'rgba(255,255,255,.10)';
+  g.fillRect(0, y, geo.W, 1);
+}
+function drawBody(g, geo, P) {
+  P = P || pal();
+  var C = P.frame;
+  var railH = Math.max(8, Math.min(20, geo.H * 0.034));
+  var bottom = geo.blockBottom;
+  var wood = g.createLinearGradient(0, bottom - railH, 0, bottom);
+  wood.addColorStop(0, C.top);
+  wood.addColorStop(0.35, C.mid);
+  wood.addColorStop(1, C.bot);
+  g.fillStyle = wood;
+  g.fillRect(0, bottom - railH, geo.W, railH);
+  g.fillStyle = C.rim;
+  g.fillRect(0, bottom - railH, geo.W, 1);
+  var side = Math.max(4, Math.min(12, geo.W * 0.006));
+  var sw = g.createLinearGradient(0, 0, side, 0);
+  sw.addColorStop(0, C.side);
+  sw.addColorStop(1, C.side2);
+  g.fillStyle = sw;
+  g.fillRect(0, geo.offsetY, side, bottom - geo.offsetY);
+  g.save();
+  g.translate(geo.W, 0);
+  g.scale(-1, 1);
+  g.fillStyle = sw;
+  g.fillRect(0, geo.offsetY, side, bottom - geo.offsetY);
+  g.restore();
+}
+
+/* ================= 上方简谱条：等宽七彩光柱 ================= */
+// 每个琴键正上方一根**等宽**光柱（黑键和白键一样宽，柱子居中在自己的键上）。
+// 颜色按音名散列到彩虹：同一个音名永远同一个颜色，相邻音名差 137.5°（看着像随机，其实是固定的）。
+// 弹下去光柱从顶部落到琴键上沿并亮起，力度决定柱高，按住时柱内光带持续上淌。不显示任何数字。
+function laneOf(k, geo) {
+  // 所有柱子同宽，宽度取黑键宽度（白键宽的 0.6）：
+  // 黑键柱子正好盖住黑键、白键柱子居中在白键上两边留缝，黑白等宽又不会互相压住
+  var w = geo.whiteW * 0.72;
+  var cx = k.black
+    ? (k.whiteIdx + 1) * geo.whiteW
+    : k.whiteIdx * geo.whiteW + geo.whiteW / 2;
+  return { x: cx - w / 2, w: w, black: !!k.black };
+}
+
+// 键 → 颜色相。**每个琴键一种颜色**（不是整条彩虹），同一个键永远同一个色，
+// 按黄金角 137.5° 散列保证相邻半音颜色拉得开、任意和弦都是花的；
+// settings.barSeed 是每次打开时随机的一个整体旋转量，「换一批颜色」按钮换的就是它。
+function barHueOf(k, now) {
+  var h = (k.midi * 137.508 + (settings.barSeed || 0)) % 360;
+  if (h < 0) h += 360;
+  // 随机变色模式：每根柱子按自己的相位缓慢流转，弹长音时看得见颜色在走
+  if (settings.barMode === 'shuffle' && now != null) {
+    h += (now / 34 + k.midi * 23) % 360;
+  }
+  h = h % 360;
+  return h < 0 ? h + 360 : h;
+}
+
+// 光柱颜色。lOff 用来在同一种颜色上「提亮」，光柱底部靠琴键那头要更亮（光源在键上）
+function barColCss(k, a, lOff, now) {
+  lOff = lOff || 0;
+  if (settings.barMode === 'solid') {
+    var c = hexRgb(barCol());
+    var t = Math.min(1, lOff / 26);
+    var r = Math.round(c[0] + (255 - c[0]) * t);
+    var gg = Math.round(c[1] + (255 - c[1]) * t);
+    var bb = Math.round(c[2] + (255 - c[2]) * t);
+    return 'rgba(' + r + ',' + gg + ',' + bb + ',' + a.toFixed(3) + ')';
+  }
+  // 饱和度压到 78/84：再高就成了荧光棒，够亮但不刺眼
+  var s2 = k.black ? 84 : 78;
+  var l = (k.black ? 65 : 57) + lOff;
+  if (l > 92) l = 92;
+  return 'hsla(' + barHueOf(k, now).toFixed(1) + ',' + s2 + '%,' + l.toFixed(1) + '%,' + a.toFixed(3) + ')';
+}
+
+function drawBarBg(g, geo, P) {
+  if (!geo.barH) return;
+  var h = geo.barH, i, k;
+
+  // 底：上边淡出（像无限往上延伸的深井），越靠琴键越实
+  var bg = g.createLinearGradient(0, 0, 0, h);
+  bg.addColorStop(0, 'rgba(6,8,12,0.58)');
+  bg.addColorStop(0.38, 'rgba(9,12,17,0.90)');
+  bg.addColorStop(1, 'rgba(21,26,34,0.96)');
+  g.fillStyle = bg;
+  g.fillRect(0, 0, geo.W, h);
+
+  // 八度刻度线：每个 C 的左边一条极淡竖线，给眼睛一个刻度，而不是每键都画
+  g.fillStyle = 'rgba(255,255,255,0.055)';
+  for (i = 0; i < keys.length; i++) {
+    k = keys[i];
+    if (k.black || k.whiteIdx <= 0) continue;
+    if (jianpuOf(k.midi).pc !== 0) continue;
+    g.fillRect(k.whiteIdx * geo.whiteW - 0.5, h * 0.16, 1, h * 0.84);
+  }
+
+  // 底部接触线：光柱就落在这条线上
+  g.fillStyle = 'rgba(255,255,255,0.07)';
+  g.fillRect(0, h - 2, geo.W, 1);
+  g.fillStyle = 'rgba(255,255,255,0.12)';
+  g.fillRect(0, h - 1, geo.W, 1);
+}
+
+var FALL_MS = 260;                       // 光柱从顶部落到琴键的时间
+function easeOutCubic(t) { return 1 - Math.pow(1 - t, 3); }
+
+// 简谱条独立配色（单色模式用；七彩模式不用它）
+function barCol() { return settings.barColor || settings.accent; }
+
+// 光柱几何：等宽，高度按力度缩放（几个音一起按时顶部高低错落）
+function blockGeom(L, h, hMul) {
+  var iw = Math.max(2, L.w - 1);
+  // hMul ∈ [0, ~0.90]：轻按极矮、重按顶满。上限 h*0.90 留一线暗，下限 3px 保证窄键也不至于看不见。
+  var bh = Math.min(h * 0.90, iw * 3.0) * (hMul || 0);
+  bh = Math.max(3, bh);
+  return { iw: iw, bh: bh, restY: h - 1 - bh };   // 底边压在红毡上，贴实
+}
+
+function drawBarOne(g, geo, k, now, h, solid) {
+  // 只有真正按下的键才画光柱（velocity=0 的不画），避免静止时有微弱的底色
+  var act = active[k.midi];
+  if (!act) return;
+  var L = laneOf(k, geo);
+  var cx = L.x + L.w / 2;
+  var velR = Math.max(0, Math.min(1, act.vel / 127));
+  // 线性 0→90%：MIDI 标准 0-127 全曲线，弱奏极矮、重奏顶满
+  var bg2 = blockGeom(L, h, velR);
+  var iw = bg2.iw, bh = bg2.bh, restY = bg2.restY;
+  var p = act ? Math.min(1, (now - act.t0) / FALL_MS) : 1;
+  var y = -bh + (restY + bh) * easeOutCubic(p);
+  // 透明度随力度变化：轻按偏淡、重按饱满
+  var a = Math.min(1, 0.55 + velR * 0.45);
+
+  // 落定瞬间：8% 压扁回弹 + 一圈扩散的接触光环
+  var sq = 0, rip = -1;
+  if (act && p >= 1) {
+    var rp = (now - act.t0 - FALL_MS) / 200;
+    if (rp >= 0 && rp < 1) { sq = Math.sin(rp * Math.PI) * 0.09; rip = rp; }
+  }
+  // 按住时轻微呼吸（每个键相位不同，不会整条一起闪）
+  if (act && p >= 1 && rip < 0) a *= 0.92 + 0.08 * Math.sin(now / 240 + k.midi * 0.7);
+
+  var bw = iw * (1 + sq * 0.45);
+  var bx = cx - bw / 2;
+  var bhh = bh * (1 - sq);
+  var by = y + (bh - bhh);              // 底边钉住，向上压扁
+
+  // 这个键自己的颜色（随机变色模式下每帧都在变，所以统一走闭包取色）
+  var C = function (al, lOff) { return barColCss(k, al, lOff, now); };
+
+  // 下落时拖一条尾巴，像从上面淌下来
+  if (p < 1) {
+    var tailH = Math.min(h * 0.85, bh * 1.7 * (1 - p));
+    var tailTop = Math.max(0, y - tailH);
+    var tw = iw * 0.52, tx = cx - tw / 2;
+    var tg = g.createLinearGradient(0, tailTop, 0, y);
+    tg.addColorStop(0, C(0));
+    tg.addColorStop(0.65, C(0.10 * a));
+    tg.addColorStop(1, C(0.34 * a));
+    g.fillStyle = tg;
+    g.fillRect(tx, tailTop, tw, Math.max(0, y - tailTop));
+  }
+
+  // 按住时柱顶往上洇开一层很淡的水雾
+  if (p >= 1 && by > 3) {
+    var haloH = Math.min(by, bh * 0.55);
+    if (haloH > 3) {
+      var wg = g.createLinearGradient(0, by - haloH, 0, by);
+      wg.addColorStop(0, C(0));
+      wg.addColorStop(1, C(0.09 * a));
+      g.fillStyle = wg;
+      g.fillRect(bx, by - haloH, bw, haloH);
+    }
+  }
+
+  // 砸在琴键上沿那一下的接触光环
+  if (rip >= 0) {
+    g.strokeStyle = C(0.40 * (1 - rip) * a);
+    g.lineWidth = Math.max(1, iw * 0.12 * (1 - rip * 0.5));
+    g.beginPath();
+    if (g.ellipse) g.ellipse(cx, h - 2.5, iw * (0.55 + rip * 1.7), Math.max(2, iw * 0.26 * (0.5 + rip)), 0, 0, Math.PI * 2);
+    else g.arc(cx, h - 2.5, iw * (0.55 + rip * 1.7), 0, Math.PI * 2);
+    g.stroke();
+  }
+
+  // 光柱本体：底方顶微圆的实色柱，光从琴键那头涌上来（底亮顶暗），外面一圈同色辉光。
+  // 圆角只给顶上一点点，底下是方的——柱子才「立在」红毡上，而不是一颗糖豆。
+  var rTop = Math.min(bw * 0.10, 2.4), rBot = 0;
+  var bodyA = solid ? 0.97 : 0.95;
+  g.save();
+  g.shadowColor = C(0.58 * a);
+  g.shadowBlur = Math.max(7, iw * 1.00);
+  var pg = g.createLinearGradient(0, by, 0, by + bhh);
+  pg.addColorStop(0, C(0.60 * bodyA * a));          // 顶：略收，像光在往上散
+  pg.addColorStop(0.26, C(bodyA * a));
+  pg.addColorStop(0.74, C(bodyA * a));
+  pg.addColorStop(1, C(bodyA * a, 15));             // 底：最亮，光就在键上
+  g.fillStyle = pg;
+  rrV(g, bx, by, bw, bhh, rTop, rBot);
+  g.fill();
+  g.restore();
+
+  // 管壁：一圈同色亮边，光聚在边上而不是糊成一团
+  g.strokeStyle = C(0.50 * a, 8);
+  g.lineWidth = Math.max(1, iw * 0.05);
+  rrV(g, bx + 0.5, by + 0.5, bw - 1, bhh - 1, rTop, rBot);
+  g.stroke();
+
+  // 顶边一条断口亮线（给眼睛一个「高度」的准头），底边压在琴键上最亮
+  g.fillStyle = 'rgba(255,255,255,' + (0.34 * a).toFixed(3) + ')';
+  g.fillRect(bx + rTop, by + 0.5, bw - rTop * 2, Math.max(1, bhh * 0.03));
+  g.fillStyle = 'rgba(255,255,255,' + (0.86 * a).toFixed(3) + ')';
+  g.fillRect(bx, by + bhh - Math.max(2, bhh * 0.05), bw, Math.max(1.6, bhh * 0.045));
+
+  // 左侧一道窄 specular + 底部一层上渗的白：玻璃管的体积感，但不能把颜色冲淡
+  var lg = g.createLinearGradient(bx, 0, bx + bw, 0);
+  lg.addColorStop(0, 'rgba(255,255,255,0)');
+  lg.addColorStop(0.10, 'rgba(255,255,255,' + (0.20 * a).toFixed(3) + ')');
+  lg.addColorStop(0.26, 'rgba(255,255,255,0)');
+  lg.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = lg;
+  rrV(g, bx, by, bw, bhh, rTop, rBot);
+  g.fill();
+
+  var upg = g.createLinearGradient(0, by + bhh * 0.55, 0, by + bhh);
+  upg.addColorStop(0, 'rgba(255,255,255,0)');
+  upg.addColorStop(1, 'rgba(255,255,255,' + (0.09 * a).toFixed(3) + ')');
+  g.fillStyle = upg;
+  rrV(g, bx, by, bw, bhh, rTop, rBot);
+  g.fill();
+
+  // 黑键柱子压在白键柱子上，描一圈暗边才分得清是两根
+  if (solid) {
+    g.strokeStyle = 'rgba(4,6,10,0.60)';
+    g.lineWidth = 1.3;
+    rrV(g, bx + 0.6, by + 0.6, bw - 1.2, bhh - 1.2, rTop, rBot);
+    g.stroke();
+  }
+
+  // 柱底那片光会漫过简谱条、洒到琴键上（柱子在琴键之后画，所以真的会亮在键面上）
+  var glowR = g.createRadialGradient(cx, by + bhh, 0, cx, by + bhh, Math.max(6, bw * 1.35));
+  glowR.addColorStop(0, C(0.34 * a, 10));
+  glowR.addColorStop(0.45, C(0.16 * a, 6));
+  glowR.addColorStop(1, C(0));
+  g.fillStyle = glowR;
+  g.fillRect(cx - bw * 1.6, by + bhh - bw * 1.0, bw * 3.2, bw * 2.0);
+
+  // 柱内三道细光带持续上淌，长音看得出还在响
+  if (p >= 1) {
+    var period = 980;
+    var ph = (now % period) / period;
+    var bandH = bhh * 0.30;
+    g.save();
+    rrV(g, bx, by, bw, bhh, rTop, rBot);
+    g.clip();
+    for (var bd = 0; bd < 3; bd++) {
+      var ly = by - bandH + (bhh + bandH) * ((ph + bd / 3) % 1);
+      var bgd = g.createLinearGradient(0, ly, 0, ly + bandH);
+      bgd.addColorStop(0, 'rgba(255,255,255,0)');
+      bgd.addColorStop(0.5, 'rgba(255,255,255,' + (0.15 * a).toFixed(3) + ')');
+      bgd.addColorStop(1, 'rgba(255,255,255,0)');
+      g.fillStyle = bgd;
+      g.fillRect(bx, ly, bw, bandH);
+    }
+    g.restore();
+  }
+}
+
+function drawBarNotes(g, geo, P, now) {
+  if (!geo.barH) return;
+  var h = geo.barH, i, k;
+
+  // 白键先画
+  g.save();
+  g.globalCompositeOperation = 'source-over';
+  for (i = 0; i < keys.length; i++) {
+    k = keys[i];
+    if (!k.black) drawBarOne(g, geo, k, now, h, false);
+  }
+  g.restore();
+
+  // 黑键后画、普通混合 + 暗描边：黑键本来就压在白键上，柱子也压在上面，边界才分得清
+  g.save();
+  g.globalCompositeOperation = 'source-over';
+  for (i = 0; i < keys.length; i++) {
+    k = keys[i];
+    if (k.black) drawBarOne(g, geo, k, now, h, true);
+  }
+  g.restore();
+}
+
+/* ================= 静态层 ================= */
+function rebuildStatic() {
+  var geo = geom();
+  var P = pal();
+  sctx.clearRect(0, 0, geo.W, geo.H);
+  drawBarBg(sctx, geo, P);
+  if (P.felt) drawFelt(sctx, geo);
+
+  var i, k;
+  for (i = 0; i < keys.length; i++) {
+    k = keys[i];
+    if (!k.black) drawWhiteKey(sctx, k, geo, P, 0);
+  }
+  for (i = 0; i < keys.length; i++) {
+    k = keys[i];
+    if (!k.black) drawWhiteLabel(sctx, k, geo, P);
+  }
+  for (i = 0; i < keys.length; i++) {
+    k = keys[i];
+    if (k.black) drawBlackKey(sctx, k, geo, P, 0);
+  }
+  for (i = 0; i < keys.length; i++) {
+    k = keys[i];
+    if (k.black) drawBlackLabel(sctx, k, geo, P);
+  }
+  if (settings.bodyFrame) drawBody(sctx, geo, P);
+
+  // 命中区域
+  keyRects = [];
+  for (i = 0; i < keys.length; i++) {
+    k = keys[i];
+    if (k.black) {
+      keyRects.push({ midi: k.midi, black: true, x: (k.whiteIdx + 1) * geo.whiteW - geo.blackW / 2, y: geo.keyTop, w: geo.blackW, h: geo.blackBottom - geo.keyTop });
+    } else {
+      keyRects.push({ midi: k.midi, black: false, x: k.whiteIdx * geo.whiteW, y: geo.keyTop, w: geo.whiteW, h: geo.H - geo.keyTop });
+    }
+  }
+}
+
+/* ================= 动态层 ================= */
+function draw(now) {
+  var W = canvas.clientWidth, H = canvas.clientHeight;
+  if (W < 2 || H < 2) return;
+  ctx.clearRect(0, 0, W, H);
+  ctx.drawImage(staticCanvas, 0, 0, W, H);
+  var geo = geom();
+  var P = pal();
+  // 先画按下的白键、再画按下的黑键：黑键永远压在白键上面
+  var i, k, inten;
+  for (i = 0; i < keys.length; i++) {
+    k = keys[i];
+    if (k.black) continue;
+    inten = intensityOf(k.midi, now);
+    if (inten <= 0.01) continue;
+    ctx.save();
+    ctx.globalAlpha = Math.min(1, inten);
+    drawWhiteKey(ctx, k, geo, P, 1);
+    drawWhiteLabel(ctx, k, geo, P);
+    ctx.restore();
+  }
+  for (i = 0; i < keys.length; i++) {
+    k = keys[i];
+    if (!k.black) continue;
+    inten = intensityOf(k.midi, now);
+    if (inten <= 0.01) continue;
+    ctx.save();
+    ctx.globalAlpha = Math.min(1, inten);
+    drawBlackKey(ctx, k, geo, P, 1);
+    drawBlackLabel(ctx, k, geo, P);
+    ctx.restore();
+  }
+  drawBarNotes(ctx, geo, P, now);
+}
+
+/* ================= MIDI ================= */
+// 把 MIDI 状态字节解析成音符动作（自己订阅时和宿主转发时共用）
+function handleMidi(st, d1, d2) {
+  if (st === 0x90 && d2 > 0) noteOn(d1, d2);
+  else if (st === 0x80 || (st === 0x90 && d2 === 0)) noteOff(d1);
+  else if (st === 0xb0 && d1 === 64) setSustain(d2 >= 64);
+  else if (st === 0xb0 && (d1 === 123 || d1 === 120)) allNotesOff();
+}
+function onMidiMessage(e) {
+  if (settings.deviceId && e.target && e.target.id && e.target.id !== settings.deviceId) return;
+  var d = e.data;
+  if (!d || d.length < 2) return;
+  handleMidi(d[0] & 0xf0, d[1], d.length > 2 ? d[2] : 0);
+}
+function refreshDevices() {
+  var list = [];
+  if (midiAccess) midiAccess.inputs.forEach(function (inp) { list.push(inp); });
+  devSel.innerHTML = '';
+  if (!list.length) {
+    devSel.innerHTML = '<option value="">（未检测到设备）</option>';
+  } else {
+    list.forEach(function (inp) {
+      inp.onmidimessage = onMidiMessage;
+      var o = document.createElement('option');
+      o.value = inp.id;
+      o.textContent = inp.name || inp.id;
+      devSel.appendChild(o);
+    });
+    if (!settings.deviceId || !list.some(function (i) { return i.id === settings.deviceId; })) settings.deviceId = list[0].id;
+    devSel.value = settings.deviceId;
+  }
+  updateStatus();
+}
+function initMidi() {
+  // midiHost=1：由排版台统一收 MIDI 再转发进来，这里就不要再自己订阅一次
+  // （同一台设备被两个地方订阅会重复触发，键会闪两下）
+  if (midiHostMode) { updateStatus(); return; }
+  if (!navigator.requestMIDIAccess) { updateStatus(true); return; }
+  navigator.requestMIDIAccess({ sysex: false }).then(function (access) {
+    midiAccess = access;
+    refreshDevices();
+    access.onstatechange = function () {
+      var still = false;
+      access.inputs.forEach(function (i) { if (i.id === settings.deviceId) still = true; });
+      refreshDevices();
+      if (!still) allNotesOff();
+    };
+  }).catch(function (err) { updateStatus(false, err && err.name ? err.name : String(err)); });
+}
+
+/* ================= 鼠标试弹 ================= */
+var pointerNote = null, pointerId = null;
+function hitTest(x, y) {
+  for (var i = keyRects.length - 1; i >= 0; i--) {
+    var r = keyRects[i];
+    if (x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) return r;
+  }
+  return null;
+}
+canvas.addEventListener('pointerdown', function (e) {
+  var rect = canvas.getBoundingClientRect();
+  var r = hitTest(e.clientX - rect.left, e.clientY - rect.top);
+  if (!r) return;
+  canvas.setPointerCapture(e.pointerId);
+  pointerId = e.pointerId;
+  pointerNote = r.midi;
+  noteOn(r.midi, 96);
+  e.preventDefault();
+});
+canvas.addEventListener('pointermove', function (e) {
+  if (pointerId !== e.pointerId || pointerNote === null) return;
+  var rect = canvas.getBoundingClientRect();
+  var r = hitTest(e.clientX - rect.left, e.clientY - rect.top);
+  if (r && r.midi !== pointerNote) {
+    noteOff(pointerNote);
+    pointerNote = r.midi;
+    noteOn(pointerNote, 96);
+  }
+});
+function endPointer(e) {
+  if (pointerId !== e.pointerId) return;
+  if (pointerNote !== null) noteOff(pointerNote);
+  pointerNote = null;
+  pointerId = null;
+}
+canvas.addEventListener('pointerup', endPointer);
+canvas.addEventListener('pointercancel', endPointer);
+
+/* ================= UI ================= */
+function applyBg() { document.body.className = 'bg-' + settings.bg; }
+function togglePanel(show) {
+  panel.style.display = show ? '' : 'none';
+  showBtn.style.display = show ? 'none' : 'block';
+}
+function updateStatus(noMidi, errMsg) {
+  var n = 0, m, dev = null;
+  for (m in active) n++;
+  if (midiAccess) midiAccess.inputs.forEach(function (i) { if (i.id === settings.deviceId) dev = i.name; });
+  if (noMidi) {
+    statusEl.innerHTML = '浏览器不支持 Web MIDI，请改用 Chrome / Edge 打开';
+    return;
+  }
+  statusEl.innerHTML = '设备：<b>' + (dev || '未检测到') + '</b> · 按下 <b>' + n + '</b> 键' +
+    (sustainOn ? ' · 延音:开' : '') + (errMsg ? '<br>错误：' + errMsg : '');
+}
+function bindUI() {
+  devSel.addEventListener('change', function () { settings.deviceId = devSel.value; saveSettings(); updateStatus(); });
+  styleSel.addEventListener('change', function () {
+    settings.style = styleSel.value; saveSettings(); rebuildStatic();
+  });
+  rangeSel.addEventListener('change', function () {
+    if (rangeSel.value === 'custom') { customDiv.style.display = 'flex'; return; }
+    customDiv.style.display = 'none';
+    var p = rangeSel.value.split(',');
+    settings.startNote = +p[0];
+    settings.keyCount = +p[1];
+    startNum.value = settings.startNote;
+    countNum.value = settings.keyCount;
+    buildKeys(); saveSettings(); rebuildStatic();
+  });
+  function customApply() {
+    settings.startNote = Math.max(21, Math.min(108, +startNum.value || 36));
+    settings.keyCount = Math.max(12, Math.min(88, +countNum.value || 61));
+    buildKeys(); saveSettings(); rebuildStatic();
+  }
+  startNum.addEventListener('change', customApply);
+  countNum.addEventListener('change', customApply);
+  cbJianpu.addEventListener('change', function () { settings.showJianpu = cbJianpu.checked; saveSettings(); rebuildStatic(); });
+  cbNames.addEventListener('change', function () { settings.showNames = cbNames.checked; saveSettings(); rebuildStatic(); });
+  cbFrame.addEventListener('change', function () { settings.bodyFrame = cbFrame.checked; saveSettings(); rebuildStatic(); });
+  cbBar.addEventListener('change', function () {
+    settings.showBar = cbBar.checked;
+    barOpts.style.display = cbBar.checked ? '' : 'none';
+    saveSettings(); rebuildStatic();
+  });
+  bgSel.addEventListener('change', function () { settings.bg = bgSel.value; applyBg(); saveSettings(); });
+  colorSel.addEventListener('input', function () { settings.accent = colorSel.value; saveSettings(); });
+  barScaleSel.addEventListener('change', function () {
+    settings.barScale = parseFloat(barScaleSel.value) || 0.26;
+    saveSettings(); rebuildStatic();
+  });
+  barModeSel.addEventListener('change', function () {
+    settings.barMode = barModeSel.value;          // random / shuffle / solid
+    saveSettings();
+  });
+  document.getElementById('barReroll').addEventListener('click', function () {
+    settings.barSeed = Math.random() * 360;       // 重新随机分配每个键的颜色
+    saveSettings();
+  });
+  barColorSel.addEventListener('input', function () {
+    settings.barColor = barColorSel.value; saveSettings();
+  });
+  document.getElementById('barColorReset').addEventListener('click', function () {
+    settings.barColor = settings.accent;
+    barColorSel.value = settings.accent;
+    saveSettings();
+  });
+  document.getElementById('allOffBtn').addEventListener('click', allNotesOff);
+  document.getElementById('hideBtn').addEventListener('click', function () { togglePanel(false); });
+  showBtn.addEventListener('click', function () { togglePanel(true); });
+  document.addEventListener('keydown', function (e) {
+    var t = e.target && e.target.tagName;
+    if (t === 'INPUT' || t === 'SELECT' || t === 'TEXTAREA') return;
+    if (e.key === 'h' || e.key === 'H') togglePanel(panel.style.display === 'none');
+    else if (e.key === 'f' || e.key === 'F') {
+      if (document.fullscreenElement) document.exitFullscreen();
+      else document.documentElement.requestFullscreen();
+    }
+  });
+}
+function restoreUI() {
+  var found = false;
+  for (var i = 0; i < rangeSel.options.length; i++) {
+    if (rangeSel.options[i].value === settings.startNote + ',' + settings.keyCount) { rangeSel.selectedIndex = i; found = true; break; }
+  }
+  if (!found) { rangeSel.value = 'custom'; customDiv.style.display = 'flex'; }
+  startNum.value = settings.startNote;
+  countNum.value = settings.keyCount;
+  cbJianpu.checked = settings.showJianpu;
+  cbNames.checked = settings.showNames;
+  cbFrame.checked = settings.bodyFrame;
+  cbBar.checked = !!settings.showBar;
+  barOpts.style.display = settings.showBar ? '' : 'none';
+  styleSel.value = settings.style;
+  bgSel.value = settings.bg;
+  colorSel.value = settings.accent;
+  barColorSel.value = settings.barColor || settings.accent;
+  barScaleSel.value = String(settings.barScale || 0.26);
+  barModeSel.value = settings.barMode === 'solid' ? 'solid' : (settings.barMode === 'shuffle' ? 'shuffle' : 'random');
+  applyBg();
+  if (settings.panel === false) { panel.style.display = 'none'; showBtn.style.display = 'none'; }
+}
+
+/* ================= 启动 ================= */
+function loop() {
+  draw(performance.now());
+  requestAnimationFrame(loop);
+}
+makeNoise();
+buildKeys();
+restoreUI();
+bindUI();
+resize();
+initMidi();
+loop();
+
+// ── 接收父页面（排版台）通过 postMessage 转发进来的 MIDI 消息 ──
+// data 可能是数字数组（网页版）或逗号分隔字符串（旧版兼容）
+window.addEventListener('message', function (e) {
+  var d = e && e.data;
+  if (!d || typeof d !== 'object' || d.type !== 'midiBatch' || !d.data) return;
+  var raw = d.data;
+  var arr = (typeof raw === 'string') ? raw.split(',').map(Number) : raw;
+  if (!Array.isArray(arr)) return;
+  for (var i = 0; i + 2 < arr.length; i += 3) {
+    handleMidi(arr[i] & 0xf0, arr[i + 1], arr[i + 2]);
+  }
+});
+
+window.__piano = {
+  noteOn: noteOn,
+  noteOff: noteOff,
+  allNotesOff: allNotesOff,
+  // 宿主（排版台）把 MIDI 消息转进来：走同一条解析路径，行为与直接订阅完全一致
+  midiIn: function (st, d1, d2) { handleMidi(st & 0xf0, d1, d2 || 0); },
+  // 一批消息（宿主每帧攒一批发过来，快速演奏也不延迟）
+  midiBatch: function (arr) {
+    for (var i = 0; i + 2 < arr.length; i += 3) handleMidi(arr[i] & 0xf0, arr[i + 1], arr[i + 2]);
+  },
+  setDevice: function (id) { settings.deviceId = id || ''; saveSettings(); refreshDevices(); },
+  listDevices: function () {
+    var out = [];
+    if (midiAccess) midiAccess.inputs.forEach(function (i) { out.push({ id: i.id, name: i.name || i.id, state: i.state }); });
+    return out;
+  },
+  getState: function () {
+    var a = [];
+    for (var m in active) a.push(+m);
+    return { active: a, sustainOn: sustainOn, whiteCount: whiteCount, settings: settings };
+  }
+};
+</script>
+</body>
+</html>

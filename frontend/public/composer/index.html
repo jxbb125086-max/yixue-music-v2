@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>钢琴教学排版台（网页版）</title>
+<link rel="stylesheet" href="styles.css">
+<style>
+/* 网页版适配样式 */
+html, body {
+  height: 100%;
+  overflow: hidden;
+}
+/* 舞台：工具栏和状态栏之间的剩余空间，背景纯黑。
+   画布填满整个舞台区域，用户排版时所见即所得。 */
+#stage {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: stretch;
+  justify-content: stretch;
+  background: #000;
+  overflow: hidden;
+}
+#canvas {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  /* 画布 = 最终输出画面。编辑时描一圈细边，让边界看得见（隐藏时去掉） */
+  outline: 1px solid rgba(255, 255, 255, .12);
+  outline-offset: 0;
+}
+#liveHint {
+  position: fixed;
+  top: 56px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 200;
+}
+/* iframe 里的琴键源尺寸自适应 */
+.fbody iframe {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: none;
+}
+</style>
+</head>
+<body class="bg-dark">
+
+<header id="toolbar">
+  <div class="group">
+    <span class="midi-box off" id="midiBox" title="MIDI 状态">
+      <button class="midi-dot" id="midiDot" title="重新扫描"></button>
+      <span id="midiStatus" class="sr-only">MIDI：检测中…</span>
+    </span>
+  </div>
+  <div class="group">
+    <button id="addWindow" class="tb">窗口</button>
+    <button id="addCamera" class="tb">镜头</button>
+    <button id="addKeys" class="tb">键盘</button>
+    <button id="addText" class="tb">文字</button>
+    <button id="addFile" class="tb">文件</button>
+  </div>
+  <div class="group">
+    <button id="optLive" class="tb" title="隐藏边框（Tab 切换）">隐藏</button>
+    <button id="clearAll" class="tb danger">清空</button>
+  </div>
+</header>
+
+<main id="stage">
+  <div id="canvas">
+    <div id="guides"></div>
+    <div id="emptyHint">点上方按钮开始排版 · 布局会自动保存，下次打开自动恢复</div>
+  </div>
+</main>
+
+<!-- 隐藏工具栏模式下鼠标移到窗口顶部才浮出来，告诉你怎么退出去 -->
+<div id="liveHint">
+  <span class="lh-dot"></span>
+  <span>隐藏工具栏模式</span>
+  <span class="lh-keys">按 <kbd>Tab</kbd> 或 <kbd>Esc</kbd> 退出</span>
+  <button id="liveExit">退出隐藏工具栏</button>
+</div>
+
+<div id="srcModal" class="modal hidden">
+  <div class="modal-box">
+    <div class="modal-head">
+      <span>选择要采集的窗口 / 屏幕</span>
+      <div>
+        <button id="srcRefresh" class="tb">刷新</button>
+        <button id="srcClose" class="tb">关闭</button>
+      </div>
+    </div>
+    <div id="srcList" class="src-list"><div class="src-empty">点击「窗口」按钮开始采集</div></div>
+  </div>
+</div>
+
+<div id="camModal" class="modal hidden">
+  <div class="modal-box" style="width:min(460px,92vw)">
+    <div class="modal-head">
+      <span>选择镜头</span>
+      <div>
+        <button id="camRefresh" class="tb">刷新</button>
+        <button id="camClose" class="tb">关闭</button>
+      </div>
+    </div>
+    <div id="camList" class="src-list" style="grid-template-columns:1fr"><div class="src-empty">读取中…</div></div>
+  </div>
+</div>
+
+<script src="compositor-shim.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

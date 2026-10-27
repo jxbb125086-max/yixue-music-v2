@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#0D1117" />
+  <!-- 老安卓/微信里会把数字串识别成电话、邮箱，点了会跳走 -->
+  <meta name="format-detection" content="telephone=no,email=no,address=no" />
+  <title>易学音乐沙龙</title>
+  <script>
+    window.process = { env: {} };
+    window.global = window;
+    window.Buffer = [];
+    window.Buffer.isBuffer = function () { return false; };
+  </script>
+</head>
+
+<body>
+  <div id="app"></div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+
+</html>
