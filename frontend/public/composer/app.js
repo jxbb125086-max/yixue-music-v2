@@ -98,6 +98,7 @@ function renderFrame(f) {
       '<span class="facts">' +
         (f.kind === 'keys' ? '<button data-act="kopts" title="琴键风格/背景/音域">琴键</button>' : '') +
         (f.kind === 'text' ? '<button data-act="topts" title="字体/字号/颜色/描边/背景/阴影">文字</button>' : '') +
+        (f.kind === 'desktop' ? '<button data-act="max" title="铺满整个画布">铺满</button>' : '') +
         '<button data-act="front" title="提到最前">置顶</button>' +
         '<button data-act="lock" title="锁定位置">锁定</button>' +
         '<button data-act="close" title="删除" class="fbtn-x">&times;</button>' +
@@ -145,39 +146,25 @@ function acquireDesktop(f, body) {
 
 /* 网页版窗口采集：getDisplayMedia（浏览器屏幕共享，可选窗口/整个屏幕） */
 function acquireWebDesktop(f, body) {
-  acquireDisplay(f, body, { video: { cursor: 'always', frameRate: 30 } });
-}
-
-/* 标签页采集：只列浏览器自己的标签页（当前标签页优先），选中后铺到画布底层 */
-function acquireTab(f, body) {
-  f.isTab = true;
-  acquireDisplay(f, body, {
-    preferCurrentTab: true,
-    selfBrowserSurface: 'include',
-    systemAudio: 'exclude',
-    video: { cursor: 'never', frameRate: 30 }
-  });
-}
-
-/* 网页版屏幕/标签页采集通用流程 */
-function acquireDisplay(f, body, extraOpts) {
-  const hint = f.isTab ? '请选择要展示的浏览器标签页' : '请在弹出的浏览器对话框中选择要采集的窗口或屏幕';
-  body.innerHTML = '<div class="floading">正在请求共享…<br>' + hint + '</div>';
+  body.innerHTML = '<div class="floading">正在请求屏幕共享…<br>请在弹出的浏览器对话框中选择要采集的窗口或屏幕</div>';
   let done = false;
   const timer = setTimeout(() => {
     if (done) return;
     done = true;
     diag('web desktop capture timeout: ' + f.name);
-    showErr(body, '共享请求超时或已取消。' +
+    showErr(body, '屏幕共享请求超时或已取消。' +
       '<div class="fbtns"><button class="fbtn" data-retry="1">重新共享</button></div>');
   }, 30000);
 
-  navigator.mediaDevices.getDisplayMedia(Object.assign({ audio: false }, extraOpts)).then(stream => {
+  navigator.mediaDevices.getDisplayMedia({
+    video: { cursor: 'always', frameRate: 30 },
+    audio: false
+  }).then(stream => {
     if (done) { stream.getTracks().forEach(t => t.stop()); return; }
     done = true;
     clearTimeout(timer);
     if (!stream.getVideoTracks().length) {
-      showErr(body, '未选择任何共享区域。' +
+      showErr(body, '未选择任何屏幕区域。' +
         '<div class="fbtns"><button class="fbtn" data-retry="1">重新共享</button></div>');
       return;
     }
@@ -191,46 +178,34 @@ function acquireDisplay(f, body, extraOpts) {
     f.stream = stream;
     followStreamAspect(f, v);       // 框体跟随实际共享画面的比例
     stream.getVideoTracks().forEach(tr => {
-      tr.addEventListener('ended', () => showErr(body, '共享已结束。' +
+      tr.addEventListener('ended', () => showErr(body, '屏幕共享已结束。' +
         '<div class="fbtns"><button class="fbtn" data-retry="1">重新共享</button></div>'));
     });
     const track = stream.getVideoTracks()[0];
-    // 整个屏幕时 track.label 形如 "screen:0:0" / "Entire screen"，别写成「窗口 · 」
+    // 共享整个屏幕时 track.label 形如 "screen:0:0" / "Entire screen"，别写成「窗口 · 」
     const lbl = (track && track.label) || '';
-    if (f.isTab) {
-      f.name = '标签页 · ' + (lbl || '当前页');
-      const title = f.el.querySelector('.ftitle');
-      if (title) title.textContent = f.name;
-      sendToBack(f);
-    } else if (lbl && lbl !== 'Screen') {
+    if (lbl && lbl !== 'Screen') {
       const isScreen = /^screen/i.test(lbl) || /^(entire|整个|屏幕)/i.test(lbl);
       const label = (isScreen ? '屏幕 · ' : '窗口 · ') + lbl;
       const title = f.el.querySelector('.ftitle');
       if (title) title.textContent = label;
       f.name = label;
       f.isScreen = isScreen;
+      persist();
     }
-    persist();
   }).catch(err => {
     if (done) return;
     done = true;
     clearTimeout(timer);
-    diag('web display capture failed: ' + f.name + ' -> ' + (err.name || '') + ' ' + (err.message || err));
+    diag('web desktop capture failed: ' + f.name + ' -> ' + (err.name || '') + ' ' + (err.message || err));
     if (err.name === 'NotAllowedError' || err.name === 'NotFoundError') {
-      showErr(body, '共享已取消。' +
+      showErr(body, '屏幕共享已取消。' +
         '<div class="fbtns"><button class="fbtn" data-retry="1">重新共享</button></div>');
     } else {
-      showErr(body, '共享失败：' + esc(err.message || err.name) +
+      showErr(body, '屏幕共享失败：' + esc(err.message || err.name) +
         '<div class="fbtns"><button class="fbtn" data-retry="1">重试</button></div>');
     }
   });
-}
-
-function sendToBack(f) {
-  f.z = 1;
-  f.el.style.zIndex = 1;
-  const zEl = f.el.querySelector('.fz');
-  if (zEl) zEl.textContent = '1';
 }
 
 /* ---------- 镜头采集 ---------- */
@@ -790,13 +765,6 @@ function fillBody(f, body) {
       f.iframe = fr;
     } else if (f.kind === 'text') {
       renderText(f, body);
-    } else if (f.kind === 'tab') {
-      if (f.needGesture) {
-        body.innerHTML = '<div class="floading">浏览器需要你点一下才能重新共享标签页<br>（刷新页面后共享不会自动恢复）' +
-          '<div class="fbtns"><button class="fbtn" data-share="1">开始共享</button></div></div>';
-        return;
-      }
-      acquireTab(f, body);
     } else if (f.kind === 'image') {
       if (deadFile(f)) { showFileErr(f, body); return; }
       const img = document.createElement('img');
@@ -1003,6 +971,25 @@ function wireFrame(f, el) {
     f.el.style.zIndex = f.z;
     persist();
   });
+  const maxbtn = el.querySelector('[data-act="max"]');
+  if (maxbtn) maxbtn.addEventListener('click', () => {
+    if (f.maximized) {
+      // 还原到铺满前的尺寸
+      f.x = f.prev && f.prev.x != null ? f.prev.x : 60;
+      f.y = f.prev && f.prev.y != null ? f.prev.y : 60;
+      f.w = f.prev && f.prev.w ? f.prev.w : 640;
+      f.h = f.prev && f.prev.h ? f.prev.h : 360;
+      delete f.maximized; delete f.prev;
+      maxbtn.textContent = '铺满';
+    } else {
+      f.prev = { x: f.x, y: f.y, w: f.w, h: f.h };
+      f.maximized = true;
+      fitFrameToCanvas(f);
+      maxbtn.textContent = '还原';
+    }
+    applyFrameStyle(f);
+    persist();
+  });
   el.querySelector('[data-act="lock"]').addEventListener('click', () => {
     f.locked = !f.locked;
     el.classList.toggle('locked', f.locked);
@@ -1181,7 +1168,6 @@ document.addEventListener('click', e => {
     if (f) {
       const body = frameEl.querySelector('.fbody');
       if (f.kind === 'desktop') acquireDesktop(f, body);
-      else if (f.kind === 'tab') acquireTab(f, body);
       else if (f.kind === 'camera') acquireCamera(f, body);
     }
     return;
@@ -1299,10 +1285,6 @@ async function restore() {
       // 恢复的屏幕共享不能自动申请（需要用户手势），先占位等点击
       d.needGesture = true;
     }
-    if (d.kind === 'tab') {
-      // 标签页共享同样需要用户手势，恢复时占位
-      d.needGesture = true;
-    }
     // 标记「来自上次会话」：本地文件（blob:）此时一定失效，直接给重新选择的入口
     d.restored = true;
     const f = addFrame(d);
@@ -1383,9 +1365,6 @@ function openRepick(f) {
   loadSources();
   toast('请选择要绑定到该框的窗口');
 }
-$('#addTab').addEventListener('click', () => {
-  addFrame({ name: '标签页', kind: 'tab', z: 1, x: 0, y: 0, w: 1600, h: 900 });
-});
 $('#addWindow').addEventListener('click', async () => {
   repickTarget = null;
   srcModal.classList.remove('hidden');
@@ -1623,6 +1602,19 @@ function fitFramesIntoCanvas() {
   });
 }
 
+/* 铺满画布：让框体撑满整个画布，保留纵横比（contain）并居中 */
+function fitFrameToCanvas(f) {
+  const W = canvas.clientWidth, H = canvas.clientHeight;
+  if (!W || !H) return;
+  // 窗口源有固定纵横比（followStreamAspect），铺满时按 contain 算
+  const aspect = f.keepRatio && f.aspect ? f.aspect : (f.w && f.h ? f.w / f.h : 16 / 9);
+  let w = W, h = Math.round(W / aspect);
+  if (h > H) { h = H; w = Math.round(H * aspect); }
+  f.w = w; f.h = h;
+  f.x = Math.max(0, Math.round((W - w) / 2));
+  f.y = Math.max(0, Math.round((H - h) / 2));
+}
+
 /* ================= 弹窗可拖动 ================= */
 // 设定栏弹出来后能拖到任意位置，不挡住要看的画面
 function draggableModal(panel, handle) {
@@ -1795,7 +1787,7 @@ window.__composer = { exportCanvasStream, sendCanvasStreamToParent, getFrames: (
     // 嵌入模式：工具栏搬到了父页面（教学框上方），这里直接转发点击
     if (e.data.type === 'TOOLBAR_ACTION') {
       const btn = {
-        window: '#addWindow', tab: '#addTab', camera: '#addCamera', keys: '#addKeys',
+        window: '#addWindow', camera: '#addCamera', keys: '#addKeys',
         text: '#addText', file: '#addFile', live: '#optLive', clear: '#clearAll'
       }[e.data.action];
       const el = btn && $(btn);

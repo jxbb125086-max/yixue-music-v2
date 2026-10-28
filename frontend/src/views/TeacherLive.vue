@@ -114,7 +114,6 @@
              好处：画面里永远不会出现工具栏、也不会留一条黑框，画布正好铺满 16:9 -->
         <div class="stage-tools">
           <button class="stool" @click="toolAction('window')" title="采集某个窗口/屏幕">窗口</button>
-          <button class="stool" @click="toolAction('tab')" title="共享浏览器标签页（可叠加琴键文字）">标签页</button>
           <button class="stool" @click="toolAction('camera')" title="接入摄像头">镜头</button>
           <button class="stool" @click="toolAction('keys')" title="加一块 MIDI 琴键">键盘</button>
           <button class="stool" @click="toolAction('text')" title="加一个文字框">文字</button>
