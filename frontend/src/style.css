@@ -78,10 +78,6 @@ body::before {
 
 #app { position: relative; z-index: 1; }
 
-/* 沉浸式全屏时锁住页面滚动（画面是 position:fixed 铺满视口的） */
-html.stage-locked,
-html.stage-locked body { overflow: hidden !important; }
-
 ::-webkit-scrollbar { width: 9px; height: 9px; }
 ::-webkit-scrollbar-thumb { background: #2A3444; border-radius: 6px; border: 2px solid var(--bg); }
 ::-webkit-scrollbar-thumb:hover { background: #3A465A; }

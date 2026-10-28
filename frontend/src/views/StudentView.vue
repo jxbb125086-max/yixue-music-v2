@@ -67,6 +67,14 @@
               </svg>
               <span>全屏</span>
             </button>
+            <!-- 退出按钮必须放在 .video-stage 内部：和 <video> 同级比较 z-index 才可靠。
+                 放到外面（哪怕 fixed + 更高 z-index）实测会被 video 拦截点击。 -->
+            <button v-if="immersive || nativeFs" class="stage-exit" @click="toggleFullscreen" title="退出全屏">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <path d="M6 6l12 12M18 6L6 18" />
+              </svg>
+            </button>
           </div>
         </div>
 
@@ -101,16 +109,6 @@
           </div>
         </div>
       </div>
-
-      <!-- 全屏时的退出按钮：nativeFs（浏览器全屏）和 immersive（CSS 沉浸式）都显示 -->
-      <template v-if="immersive || nativeFs">
-        <button class="immersive-exit" @click="toggleFullscreen" title="退出全屏">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
-            stroke-linecap="round" stroke-linejoin="round">
-            <path d="M6 6l12 12M18 6L6 18" />
-          </svg>
-        </button>
-      </template>
 
       <!-- 右栏：桌面放「连线卡 + 公屏」，手机只放公屏 -->
       <div class="live-rail">
@@ -195,7 +193,10 @@ const immersive = ref(false)    // CSS 沉浸式全屏中（无浏览器全屏�
 const chatScroll = ref(null)
 
 // 桌面/手机两套连线位置：桌面进右栏（公屏上方），手机留在画面正下方
-const isWide = ref(typeof window !== 'undefined' ? window.innerWidth >= 900 : true)
+// 「宽屏」= 宽度够放双列，或者横屏（横屏手机高度只有 ~390px，单列竖排必然溢出）。
+// 竖屏手机宽度窄、画面 16:9 只占一小条，下方正好留给聊天 → 单列。
+const WIDE_MQ = '(min-width: 900px), (min-width: 640px) and (orientation: landscape)'
+const isWide = ref(typeof window !== 'undefined' ? window.matchMedia(WIDE_MQ).matches : true)
 let wideMq = null
 function onWideChange(e) { isWide.value = e.matches }
 /* Chrome < 84 的 MediaQueryList 只有 addListener/removeListener */
@@ -310,7 +311,7 @@ function layoutLive() {
     const live = liveRef.value, area = areaRef.value, main = mainRef.value
     if (!live || !area || !main || !live.isConnected) return
     if (immersive.value || nativeFs.value) { fitStage(); return }       // 全屏时画面铺满视口，不用算
-    if (window.innerWidth < 900) { main.style.width = ''; fitStage(); return }  // 单列布局
+    if (!isWide.value) { main.style.width = ''; fitStage(); return }  // 单列布局
     const availH = area.clientHeight
     if (availH < 120) return
     const cs = getComputedStyle(live)
@@ -331,6 +332,9 @@ function watchLiveLayout() {
     if (liveRO) liveRO.disconnect()
     liveRO = new ResizeObserver(layoutLive)
     liveRO.observe(live)
+    // 也观察画面区：音频条从单行变两行时 .live 尺寸不变，只有 area 变矮，
+    // 不观察它就会一直用旧的可用高度（横屏手机上画面会莫名偏小）。
+    if (areaRef.value) liveRO.observe(areaRef.value)
     // 首帧音频条可能先换行再回单行，量两遍就稳了
     requestAnimationFrame(() => { layoutLive(); requestAnimationFrame(layoutLive) })
 }
@@ -709,7 +713,7 @@ onMounted(async () => {
     document.addEventListener('webkitfullscreenchange', onFullscreenChange)
     document.addEventListener('visibilitychange', onVisibility)
     document.addEventListener('keydown', onKeydown)
-    wideMq = window.matchMedia('(min-width: 900px)')
+    wideMq = window.matchMedia(WIDE_MQ)
     isWide.value = wideMq.matches
     bindWideMq()
     await getAudioDevices()
@@ -892,9 +896,10 @@ onBeforeUnmount(() => {
 .video-stage:-webkit-full-screen .video-hint,
 .video-stage.immersive .video-hint { display: none; }
 
-/* 退出按钮：fixed 定位，z-index 高于视频层（10001），始终可见 */
-.immersive-exit {
-  position: fixed; z-index: 10002;
+/* 退出按钮：绝对定位在画面右下角（全屏时画面=视口，就落在屏幕右下角）。
+   z-index 只需压过同级的 <video> 和 .video-hint，不用跟外层抢层级。 */
+.stage-exit {
+  position: absolute; z-index: 20;
   bottom: calc(env(safe-area-inset-bottom, 0px) + .9rem);
   right: calc(env(safe-area-inset-right, 0px) + .9rem);
   display: inline-flex; align-items: center; justify-content: center;
@@ -906,9 +911,9 @@ onBeforeUnmount(() => {
   box-shadow: 0 3px 12px rgba(0,0,0,.5);
   opacity: .95; transition: filter .15s, transform .1s;
 }
-.immersive-exit svg { width: 1.15rem; height: 1.15rem; }
-.immersive-exit:hover,
-.immersive-exit:active { filter: brightness(1.2); transform: scale(.96); }
+.stage-exit svg { width: 1.15rem; height: 1.15rem; }
+.stage-exit:hover,
+.stage-exit:active { filter: brightness(1.2); transform: scale(.96); }
 
 /* 浏览器把播放拦下来时的兜底：给一个明确可点的按钮，而不是让用户猜 */
 .resume-btn {
@@ -1079,20 +1084,16 @@ onBeforeUnmount(() => {
 .error-actions { display: flex; gap: .8rem; justify-content: center; }
 .error-actions .el-button { flex: 1; }
 
-/* ═══ 桌面端：页面锁定视口高度，只有聊天栏内部滚动 ═══ */
-@media (min-width: 900px) {
+/* ═══ 双列（桌面 / 横屏手机平板）：页面锁定视口高度，只有聊天栏内部滚动 ═══ */
+@media (min-width: 900px), (min-width: 640px) and (orientation: landscape) {
   .student { height: 100dvh; overflow: hidden; }
   .entry { overflow-y: auto; }
 }
 
-/* ═══ 平板（单列）+ 手机（≤899px）：锁视口高、画面完整、聊天吃满剩余 ═══
+/* ═══ 竖屏（平板 + 手机）/ 极窄屏：单列，锁视口高、画面完整、聊天吃满剩余 ═══
    竖屏手机（宽度窄）画面 16:9 必然比聊天矮，下方剩余高度让给聊天区。
-   - .student 锁满视口、自己不滚
-   - .live 锁高成唯一滚动容器（聊天/连线/音频都在其中，页面不被拉长）
-   - 画面 stage-area 正常流（不 sticky，避免高度塌成 0 和中间空白）
-   - 聊天 .chat-card 吃掉剩余高度（竖屏时≈60% 视口），内部再滚
-   根容器补 100%/100vh/100dvh 三级兜底，低端安卓取不到 dvh 也有高度。 */
-@media (max-width: 899px) {
+   横屏手机不走这里 —— 它高度只有 ~390px，单列竖排必然把聊天挤出视口。 */
+@media (max-width: 899px) and (orientation: portrait), (max-width: 639px) {
   .student { height: 100%; height: 100vh; height: 100dvh; overflow: hidden; }
   .live {
     flex: 1; min-height: 0; flex-direction: column;
@@ -1118,8 +1119,7 @@ onBeforeUnmount(() => {
 }
 
 /* ═══ 手机（≤640px）：更紧凑 ═══ */
-@media (max-width: 640px) {
-  .topbar { padding: .55rem .8rem; }
+@media (max-width: 640px) {  .topbar { padding: .55rem .8rem; }
   .live { padding: .6rem; gap: .6rem; }
   .live-main { gap: .6rem; }
   .video-stage { border-radius: var(--r-md); }
@@ -1139,8 +1139,25 @@ onBeforeUnmount(() => {
   .entry { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; }
 }
 
-/* ═══ 平板（641–899px）：竖屏 4:3，画面按宽度限到 72%，给聊天让高度 ═══ */
-@media (min-width: 641px) and (max-width: 899px) {
+/* ═══ 竖屏平板（641–899px）：4:3 屏，画面按宽度限到 72%，给聊天让高度 ═══ */
+@media (min-width: 641px) and (max-width: 899px) and (orientation: portrait) {
   .video-stage { width: 72%; margin: 0 auto; }
+}
+
+/* ═══ 横屏手机（矮屏 ≤520px）：高度只有 ~390px，一切压扁，画面优先 ═══
+   音频条一旦换行会吃掉 90px，把画面挤到只剩 193px 高 → 强制单行。 */
+@media (orientation: landscape) and (max-height: 520px) {
+  .live { padding: .5rem .7rem .6rem; gap: .6rem; }
+  .live-main { gap: .5rem; }
+  .audio-bar {
+    padding: .28rem .5rem; gap: .4rem .7rem;
+    flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden;
+  }
+  .audio-bar .audio-group.hide-m { display: none; }   /* 矮屏只留麦克风，扬声器用系统默认 */
+  .audio-select { width: 6rem; }
+  .audio-label { font-size: .74rem; }
+  .vol-bar.sm { display: none; }
+  .connect-card { padding: .45rem .6rem; }
+  .chat-card { min-height: 0; }
 }
 </style>

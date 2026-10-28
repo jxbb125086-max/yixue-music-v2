@@ -25,13 +25,6 @@ import zhCn from 'element-plus/dist/locale/zh-cn.mjs'
 import './style.css'
 import router from './router/index.js'
 
-// 触屏设备标记：全屏时竖屏要把画面转 90°，桌面（有鼠标）不转
-try {
-    if (window.matchMedia && window.matchMedia('(hover: none) and (pointer: coarse)').matches) {
-        document.documentElement.classList.add('is-touch')
-    }
-} catch (e) { /* 忽略 */ }
-
 const app = createApp(App)
 
 for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
