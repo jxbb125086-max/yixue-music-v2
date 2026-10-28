@@ -47,8 +47,7 @@
         <div class="entry-steps">
           <div class="step"><i>1</i><span>输入姓名</span></div>
           <div class="step"><i>2</i><span>选设备</span></div>
-          <div class="step"><i>3</i><span>选内容</span></div>
-          <div class="step"><i>4</i><span>教学大厅</span></div>
+          <div class="step"><i>3</i><span>教学大厅</span></div>
         </div>
       </div>
     </main>
@@ -102,48 +101,20 @@
 
           <div class="step-actions">
             <el-button class="btn-ghost" size="large" @click="stage = 'entry'">← 返回</el-button>
-            <el-button class="btn-primary" size="large" @click="stage = 'content'">下一步 →</el-button>
-          </div>
-        </div>
-      </div>
-    </main>
-
-    <!-- ═══ ③ 第3步：选内容 ═══ -->
-    <main v-if="stage === 'content'" class="prep">
-      <div class="prep-layout prep-layout--single">
-        <div class="prep-card card step-card">
-          <div class="step-head">
-            <span class="step-no">3</span>
-            <div>
-              <h2 class="prep-title">选择教学内容</h2>
-              <p class="prep-sub">进入大厅后画面就是这个内容，随时可以继续排版</p>
-            </div>
-          </div>
-
-          <div class="content-grid">
-            <div v-for="c in contentOptions" :key="c.id" class="content-item"
-                 :class="{ active: selectedContent === c.id }" @click="selectedContent = c.id">
-              <span class="ci-icon">{{ c.icon }}</span>
-              <b class="ci-name">{{ c.name }}</b>
-              <span class="ci-desc">{{ c.desc }}</span>
-            </div>
-          </div>
-
-          <div class="step-actions">
-            <el-button class="btn-ghost" size="large" @click="stage = 'device'">← 返回</el-button>
             <el-button class="btn-primary" size="large" @click="enterHall">进入教学大厅 →</el-button>
           </div>
         </div>
       </div>
     </main>
 
-    <!-- ═══ ④ 教学大厅 ═══ -->
+    <!-- ═══ ③ 教学大厅 ═══ -->
     <main v-show="stage === 'live'" class="live" ref="liveRef">
       <div class="live-main" ref="mainRef">
         <!-- 排版工具条：从教学框里搬出来放在框上方。
              好处：画面里永远不会出现工具栏、也不会留一条黑框，画布正好铺满 16:9 -->
         <div class="stage-tools">
           <button class="stool" @click="toolAction('window')" title="采集某个窗口/屏幕">窗口</button>
+          <button class="stool" @click="toolAction('tab')" title="共享浏览器标签页（可叠加琴键文字）">标签页</button>
           <button class="stool" @click="toolAction('camera')" title="接入摄像头">镜头</button>
           <button class="stool" @click="toolAction('keys')" title="加一块 MIDI 琴键">键盘</button>
           <button class="stool" @click="toolAction('text')" title="加一个文字框">文字</button>
@@ -158,7 +129,7 @@
             <iframe
               ref="stageIframeRef"
               class="stage-iframe"
-              :src="stageSrc"
+              src="/composer/index.html"
               allow="microphone; midi"
               @load="onStageLoaded"
             ></iframe>
@@ -279,21 +250,10 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 // 生产模式（前后端同端口部署）用同源连接；vite 开发模式(5173)才需要指定后端地址
 const SERVER_URL = import.meta.env && import.meta.env.DEV ? 'http://localhost:3000' : undefined
 
-// ── 流程状态：entry(姓名) → device(设备) → content(内容) → live(教学大厅) ──
+// ── 流程状态 ──
 const stage = ref('entry')
 const teacherNameInput = ref('')
 const teacherName = ref('')
-
-// ── 第3步：选内容 ──
-const contentOptions = [
-    { id: 'composer', icon: '🎼', name: '排版', desc: '琴键 + 文字 + 图片，自由拖拽排版', src: '/composer/index.html' },
-    { id: 'web',    icon: '🌐', name: 'Chrome 标签页', desc: '共享你当前浏览器里已打开的标签页', src: null }
-]
-const selectedContent = ref('composer')
-const stageSrc = computed(() => {
-    const c = contentOptions.find(x => x.id === selectedContent.value) || contentOptions[0]
-    return c.src
-})
 
 // ── 直播状态 ──
 const pushing = ref(false)      // 是否正在把教学框直播给学员
@@ -628,7 +588,7 @@ function enterPrep() {
 
 // ── 教学框 iframe 加载完成 ──
 function onStageLoaded() {
-    console.log('[TeacherLive] 教学框已加载，内容=' + selectedContent.value)
+    console.log('[TeacherLive] 教学框已加载')
     nextTick(layoutLive)
 }
 
@@ -1067,20 +1027,6 @@ onBeforeUnmount(() => {
 .step-actions { display: flex; gap: .9rem; justify-content: flex-end; margin-top: 2rem; }
 .step-actions .el-button { min-width: 8rem; height: 2.9rem; font-size: 1rem; }
 
-/* 选内容：两张卡片 */
-.content-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; }
-.content-item {
-  display: flex; flex-direction: column; gap: .45rem; align-items: flex-start;
-  border: 1px solid var(--line-2); border-radius: var(--r-md); padding: 1.3rem 1.2rem;
-  cursor: pointer; transition: border-color .15s, background .15s, transform .1s;
-}
-.content-item:hover { border-color: var(--gold-line); transform: translateY(-1px); }
-.content-item.active { border: 1.5px solid var(--gold); background: var(--gold-soft); }
-.ci-icon { font-size: 1.9rem; line-height: 1; }
-.ci-name { font-size: 1.02rem; }
-.ci-desc { font-size: .8rem; color: var(--text-2); line-height: 1.5; }
-.content-item.active .ci-desc { color: #D9C39A; }
-
 /* ═══ 排版台面板 ═══ */
 .composer-panel {
   flex: 1; min-width: 0; display: flex; flex-direction: column;
@@ -1324,15 +1270,6 @@ onBeforeUnmount(() => {
   .prep { padding: 1rem .9rem; }
   .step-card { padding: 1.5rem 1.2rem; }
   .step-head { gap: .75rem; margin-bottom: 1.4rem; }
-  .content-grid { grid-template-columns: 1fr; gap: .7rem; }
-  .content-item {
-    display: grid; grid-template-columns: 2rem 1fr;
-    column-gap: .8rem; row-gap: .12rem; align-items: center;
-    padding: .95rem 1rem;
-  }
-  .ci-icon { grid-row: 1 / 3; font-size: 1.5rem; }
-  .ci-name { font-size: .98rem; }
-  .ci-desc { font-size: .76rem; }
   .step-actions { margin-top: 1.4rem; }
   .step-actions .el-button { min-width: 0; flex: 1; height: 2.7rem; font-size: .95rem; }
   /* 直播开关在手机上别太占地方 */
