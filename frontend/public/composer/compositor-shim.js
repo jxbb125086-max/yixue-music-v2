@@ -6,9 +6,6 @@
   if (window.__compositorWebShimInstalled) return;
   window.__compositorWebShimInstalled = true;
 
-  let currentStream = null;
-  let currentVideoEl = null;
-
   window.compositor = {
     // ── 屏幕/窗口共享（替代 desktopCapturer）──
     // 网页版无法枚举系统窗口，统一走 getDisplayMedia（浏览器屏幕共享）
@@ -17,27 +14,6 @@
         return [{ id: 'web-share', type: 'webShare', name: '（当前浏览器不支持屏幕共享）', isScreen: true, unsupported: true }];
       }
       return [{ id: 'web-share', type: 'webShare', name: '共享屏幕 / 窗口', isScreen: true }];
-    },
-
-    async startScreenShare() {
-      try {
-        const stream = await navigator.mediaDevices.getDisplayMedia({
-          video: { cursor: 'always', frameRate: 30 },
-          audio: false
-        });
-        currentStream = stream;
-        return stream;
-      } catch (e) {
-        console.warn('[shim] 屏幕共享失败:', e.message);
-        return null;
-      }
-    },
-
-    stopScreenShare() {
-      if (currentStream) {
-        currentStream.getTracks().forEach(t => t.stop());
-        currentStream = null;
-      }
     },
 
     // ── 文件选择（替代 dialog.openFile）──
@@ -65,10 +41,6 @@
     },
 
     // ── 窗口控制（浏览器不支持，降级处理）──
-    setTransparent(v) {
-      console.warn('[shim] 透明窗口不支持，已降级为普通背景');
-    },
-
     relaunch() {
       location.reload();
     },
@@ -77,31 +49,10 @@
       console.log('[compositor]', msg);
     },
 
-    setAlwaysOnTop(v) {
-      console.warn('[shim] 置顶窗口不支持（网页版无此能力）');
-    },
-
-    setClickThrough(v) {
-      console.warn('[shim] 点击穿透不支持（网页版无此能力）');
-    },
-
-    setOpacity(v) {
-      document.body.style.opacity = v / 100;
-    },
-
-    setContentSize(w, h) {
-      // 网页版用全屏布局，忽略此调用
-      console.log('[shim] setContentSize', w, h, '(网页版忽略)');
-    },
-
     onToggleLive(cb) {
       // 键盘监听由 app.js 统一处理（Tab/Esc），shim 不再重复绑定
       // 保留接口仅为兼容 app.js 的调用，实际无操作
       window.__compositorLiveToggle = cb;
-    },
-
-    onToggleThrough(cb) {
-      // 点击穿透网页版不支持，忽略
     }
   };
 

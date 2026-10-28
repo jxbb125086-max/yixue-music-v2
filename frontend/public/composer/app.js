@@ -2,8 +2,7 @@ document.addEventListener('DOMContentLoaded', function() {
 'use strict';
 /* 钢琴教学排版台 - 渲染层 */
 const $ = s => document.querySelector(s);
-const $ctx = window.$ctx;
-const canvas = ($ctx && $ctx.canvas) || document.getElementById('canvas');
+const canvas = document.getElementById('canvas');
 const guidesBox = $('#guides');
 const emptyHint = $('#emptyHint');
 
@@ -1545,8 +1544,7 @@ $('#clearAll').addEventListener('click', () => clearAll());
 /* ================= 画布：固定 16:9 ================= */
 // 画布始终是 16:9 比例，填满可用空间（无黑边）
 function layoutCanvas() {
-  // 支持外部传入画布容器（嵌入 Vue 页面时使用）
-  const stage = ($ctx && $ctx.stage) || document.getElementById('stage');
+  const stage = document.getElementById('stage');
   if (!stage) return;
   canvas.style.width = stage.clientWidth + 'px';
   canvas.style.height = stage.clientHeight + 'px';
@@ -1684,58 +1682,11 @@ canvas.addEventListener('pointerdown', e => {
 });
 
 
-/* ================= 导出画布为视频流 =================
-   供嵌入方（如易学音乐 TeacherLive.vue）调用：
-   把整个排版画布 captureStream() 后返回，推流给学员。 */
-let _canvasStream = null;
-function exportCanvasStream(fps) {
-  fps = fps || 30;
-  if (_canvasStream) return _canvasStream;
-  if (typeof canvas.captureStream !== 'function') {
-    console.warn('[composer] canvas.captureStream 不可用，改用 MediaStream 兜底');
-    return null;
-  }
-  _canvasStream = canvas.captureStream(fps);
-  console.log('[composer] 画布流已导出，帧率=' + fps);
-  return _canvasStream;
-}
-
-// 通过 postMessage 将画布流发送给父页面
-function sendCanvasStreamToParent(fps) {
-  const stream = exportCanvasStream(fps);
-  if (!stream) return null;
-  // 通过 postMessage 将流信息发送给父页面
-  window.parent.postMessage({
-    type: 'COMPOSER_STREAM_READY',
-    stream: stream,
-    fps: fps
-  }, '*');
-  return stream;
-}
-
-window.__composer = { exportCanvasStream, sendCanvasStreamToParent, getFrames: () => frames, setSelectedFrame: id => { selectedId = id; }, setHide, isHide };
-
-
 /* ================= 启动 ================= */
 (async function boot() {
-  // 支持外部传入画布容器（嵌入 Vue 页面时，$ctx.canvas 是外部指定的 <div>）
-  if (window.$ctx && window.$ctx.canvas) {
-    const _extCanvas = window.$ctx.canvas;
-    // 替换全局 canvas 引用
-    Object.defineProperty(window, 'canvas', { value: _extCanvas, writable: true });
-    // layoutCanvas 里的 document.getElementById('stage') 改用 $ctx.stage
-    // （已在上面重写 layoutCanvas 支持）
-  }
   // 隐藏模式兜底开关（工具栏隐藏后仍能退出）
   if (window.compositor.onToggleLive) {
     window.compositor.onToggleLive(() => setHide(!isHide()));
-  }
-  // 卡死逃生键（点击穿透时鼠标点不到界面）
-  if (window.compositor.onToggleThrough) {
-    window.compositor.onToggleThrough(() => {
-      window.compositor.setClickThrough(false);
-      toast('已解除点击穿透');
-    });
   }
 
   ['#srcModal', '#camModal'].forEach(sel => {
@@ -1778,9 +1729,6 @@ window.__composer = { exportCanvasStream, sendCanvasStreamToParent, getFrames: (
   // 监听父页面请求画布流 / 隐藏编辑工具栏（推流时学员不该看到工具栏）
   window.addEventListener('message', function(e) {
     if (!e.data || typeof e.data !== 'object') return;
-    if (e.data.type === 'REQUEST_CANVAS_STREAM') {
-      sendCanvasStreamToParent(e.data.fps || 30);
-    }
     if (e.data.type === 'SET_HIDE') {
       setHide(!!e.data.on, true);
     }
