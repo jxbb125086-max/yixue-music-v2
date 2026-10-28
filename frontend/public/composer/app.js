@@ -1493,6 +1493,15 @@ function setHide(on, silent) {
   // silent（由父页面推流触发）时连提示条都不弹，否则提示会出现在学员画面里
   if (on) { if (!silent) showHideHint(3000); } else hideHideHint();
   if (!silent) toast(on ? '已隐藏（按 Tab 或 Esc 显示）' : '已显示');
+  // 把当前隐藏状态回报给父页面，让工具条的「隐藏」按钮颜色保持同步
+  reportHideState(on);
+}
+function reportHideState(on) {
+  try {
+    if (window.parent && window.parent !== window) {
+      window.parent.postMessage({ type: 'HIDE_STATE', on: !!on }, '*');
+    }
+  } catch (_) {}
 }
 $('#liveExit').addEventListener('click', () => setHide(false));
 window.addEventListener('mousemove', e => {
@@ -1695,10 +1704,16 @@ canvas.addEventListener('pointerdown', e => {
   });
   // 先把画布定成 16:9 —— 必须在 restore() 之前，否则框体会按错误尺寸摆放
   layoutCanvas();
-  if (ui.hide) {
+  // 嵌入模式（被 TeachingHall 等父页面当排版台用）下，启动时强制显示：
+  // 隐藏与否完全交给老师手动控制（点「隐藏」按钮），不该自动进入隐藏态，
+  // 避免上次退出时存下来的 hide=true 导致这次一进来就看不到框体标签
+  const embedded = window.parent && window.parent !== window;
+  if (ui.hide && !embedded) {
     document.body.classList.add('hide-ui');
     $('#optLive').classList.add('on');
     showHideHint(3000);   // 一进来就告诉你怎么退出去
+  } else if (embedded && ui.hide) {
+    ui.hide = false; saveUI();
   }
   // 窗口尺寸变化 / 工具栏换行时：重算 16:9 画布，再把框体收回画布内
   let rzTimer = null;
@@ -1731,6 +1746,10 @@ canvas.addEventListener('pointerdown', e => {
     if (!e.data || typeof e.data !== 'object') return;
     if (e.data.type === 'SET_HIDE') {
       setHide(!!e.data.on, true);
+    }
+    // 父页面（工具条「隐藏」按钮）询问当前隐藏状态，用于同步按钮颜色
+    if (e.data.type === 'GET_HIDE_STATE') {
+      try { window.parent.postMessage({ type: 'HIDE_STATE', on: isHide() }, '*') } catch (_) {}
     }
     // 嵌入模式：工具栏搬到了父页面（教学框上方），这里直接转发点击
     if (e.data.type === 'TOOLBAR_ACTION') {

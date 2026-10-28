@@ -118,6 +118,8 @@
           <button class="stool" @click="toolAction('keys')" title="加一块 MIDI 琴键">键盘</button>
           <button class="stool" @click="toolAction('text')" title="加一个文字框">文字</button>
           <button class="stool" @click="toolAction('file')" title="加图片 / 视频 / 音频">文件</button>
+          <button class="stool" :class="{ 'stool-hidden-on': stageUiHidden }" @click="toggleStageUiHidden()"
+            :title="stageUiHidden ? '框体标签已隐藏，点击显示' : '隐藏所有框体的标签 / 边框'">隐藏</button>
           <span class="stool-gap"></span>
           <button class="stool danger" @click="toolAction('clear')" title="清空所有内容">清空</button>
         </div>
@@ -257,6 +259,7 @@ const teacherName = ref('')
 // ── 直播状态 ──
 const pushing = ref(false)      // 是否正在把教学框直播给学员
 const stageIframeRef = ref(null)
+const stageUiHidden = ref(false) // 老师手动控制的「隐藏框体标签」开关状态
 
 const stageRef = ref(null)
 const mainRef = ref(null)
@@ -589,6 +592,13 @@ function enterPrep() {
 function onStageLoaded() {
     console.log('[TeacherLive] 教学框已加载')
     nextTick(layoutLive)
+    // 从排版台同步当前「隐藏」状态，让工具条的隐藏按钮颜色跟实际状态一致
+    const win = stageIframeRef.value && stageIframeRef.value.contentWindow
+    if (win) {
+        try {
+            win.postMessage({ type: 'GET_HIDE_STATE' }, '*')
+        } catch (e) { /* 忽略 */ }
+    }
 }
 
 /* ══════ 第4步：进入教学大厅 ══════
@@ -678,13 +688,24 @@ function toolAction(action) {
     try { win.postMessage({ type: 'TOOLBAR_ACTION', action }, '*') } catch (e) { /* 忽略 */ }
 }
 
-/* 通知教学框隐藏/显示编辑工具栏。
-   直播时学员不该看到「窗口/镜头/键盘/文字…」这些编辑按钮，所以自动切到干净模式；
-   老师要加内容时按 Tab 就能调出来。 */
-function setStageUiHidden(on) {
+/* 「隐藏」开关：老师手动控制，隐藏/显示所有框体的标签、边框和编辑工具条。
+   隐藏时学员看到的是干净画面；状态用按钮底色变化表示（亮=已隐藏）。 */
+function toggleStageUiHidden() {
+    stageUiHidden.value = !stageUiHidden.value
+    sendHideToComposer()
+}
+
+function sendHideToComposer() {
     const win = stageIframeRef.value && stageIframeRef.value.contentWindow
     if (!win) return
-    try { win.postMessage({ type: 'SET_HIDE', on: !!on }, '*') } catch (e) { /* 忽略 */ }
+    try { win.postMessage({ type: 'SET_HIDE', on: stageUiHidden.value, manual: true }, '*') } catch (e) { /* 忽略 */ }
+}
+
+/* 接收排版台回报的隐藏状态：当在框内按 Tab/Esc 或点框内「隐藏」按钮时，
+   工具条的「隐藏」按钮颜色也要跟着变，两处始终保持一致。 */
+function onComposerMessage(e) {
+    if (!e.data || typeof e.data !== 'object') return
+    if (e.data.type === 'HIDE_STATE') stageUiHidden.value = !!e.data.on
 }
 
 /* ══════ 直播开关 ══════
@@ -721,7 +742,6 @@ async function startPush(options = {}) {
         }))
 
         rebuildAllPeers()
-        setStageUiHidden(true)   // 学员画面里不要出现编辑工具栏
         ElMessage.success('已开始直播，学员现在能看到画面了')
     } catch (e) {
         console.error('直播失败', e)
@@ -738,7 +758,6 @@ function stopPush() {
     stream = null
     peerStream = null
     pushing.value = false
-    setStageUiHidden(false)   // 停直播后把工具栏还给老师
     rebuildAllPeers()
     ElMessage.info('已停止直播，学员看不到画面了')
 }
@@ -876,6 +895,7 @@ function detectLegacyWebView() {
 onMounted(async () => {
     detectLegacyWebView()
     document.addEventListener('click', onDocClick)
+    window.addEventListener('message', onComposerMessage)
     await getAudioDevices()
     try {
         if (navigator.mediaDevices && navigator.mediaDevices.addEventListener)
@@ -884,6 +904,7 @@ onMounted(async () => {
 })
 onBeforeUnmount(() => {
     document.removeEventListener('click', onDocClick)
+    window.removeEventListener('message', onComposerMessage)
     if (fsElement()) { try { (document.exitFullscreen || document.webkitExitFullscreen).call(document) } catch (e) { } }
     setImmersive(false)
     unlockOrientation()
@@ -1095,6 +1116,9 @@ onBeforeUnmount(() => {
 .stool:hover { color: var(--gold); border-color: var(--gold-line); background: var(--panel-3); }
 .stool.danger { color: #FF7A7F; border-color: rgba(255,90,95,.32); }
 .stool.danger:hover { background: rgba(255,90,95,.14); border-color: rgba(255,90,95,.55); }
+/* 「隐藏」开关：点亮的状态表示框体标签当前是隐藏的 */
+.stool-hidden-on { color: var(--gold); border-color: var(--gold-line); background: var(--gold-soft); }
+.stool-hidden-on:hover { color: var(--gold); border-color: var(--gold-line); background: var(--gold-soft); }
 .stool-gap { flex: 1; min-width: .4rem; }
 
 /* ═══ 画面舞台：固定 16:9 ═══
