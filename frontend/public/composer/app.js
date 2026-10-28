@@ -1492,7 +1492,7 @@ function setHide(on, silent) {
   hideSilent = !!silent && on;
   // silent（由父页面推流触发）时连提示条都不弹，否则提示会出现在学员画面里
   if (on) { if (!silent) showHideHint(3000); } else hideHideHint();
-  if (!silent) toast(on ? '已隐藏（按 Tab 或 Esc 显示）' : '已显示');
+  if (!silent) toast(on ? '已隐藏（点工具栏「隐藏」恢复）' : '已显示');
   // 把当前隐藏状态回报给父页面，让工具条的「隐藏」按钮颜色保持同步
   reportHideState(on);
 }
@@ -1664,8 +1664,6 @@ function draggableModal(panel, handle) {
 document.addEventListener('keydown', e => {
   const t = e.target && e.target.tagName;
   if (t === 'INPUT' || t === 'SELECT' || t === 'TEXTAREA') return;
-  if (e.key === 'Tab') { e.preventDefault(); setHide(!isHide()); return; }
-  if (e.key === 'Escape' && isHide()) { e.preventDefault(); setHide(false); return; }
   const f = frames.find(o => o.id === selectedId);
   if ((e.key === 'Delete' || e.key === 'Backspace') && f) {
     e.preventDefault();

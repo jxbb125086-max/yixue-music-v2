@@ -118,7 +118,7 @@
           <button class="stool" @click="toolAction('keys')" title="加一块 MIDI 琴键">键盘</button>
           <button class="stool" @click="toolAction('text')" title="加一个文字框">文字</button>
           <button class="stool" @click="toolAction('file')" title="加图片 / 视频 / 音频">文件</button>
-          <button class="stool" :class="{ 'stool-hidden-on': stageUiHidden }" @click="toggleStageUiHidden()"
+          <button class="stool" @click="toggleStageUiHidden()"
             :title="stageUiHidden ? '框体标签已隐藏，点击显示' : '隐藏所有框体的标签 / 边框'">隐藏</button>
           <span class="stool-gap"></span>
           <button class="stool danger" @click="toolAction('clear')" title="清空所有内容">清空</button>
@@ -1116,9 +1116,6 @@ onBeforeUnmount(() => {
 .stool:hover { color: var(--gold); border-color: var(--gold-line); background: var(--panel-3); }
 .stool.danger { color: #FF7A7F; border-color: rgba(255,90,95,.32); }
 .stool.danger:hover { background: rgba(255,90,95,.14); border-color: rgba(255,90,95,.55); }
-/* 「隐藏」开关：点亮的状态表示框体标签当前是隐藏的 */
-.stool-hidden-on { color: var(--gold); border-color: var(--gold-line); background: var(--gold-soft); }
-.stool-hidden-on:hover { color: var(--gold); border-color: var(--gold-line); background: var(--gold-soft); }
 .stool-gap { flex: 1; min-width: .4rem; }
 
 /* ═══ 画面舞台：固定 16:9 ═══
