@@ -1,5 +1,5 @@
 <template>
-  <div class="student">
+  <div class="student" :class="{ 'is-fs': immersive || nativeFs }">
     <!-- ═══ 顶栏 ═══ -->
     <header class="topbar">
       <div class="brand">
@@ -351,7 +351,6 @@ function setImmersive(on) {
     const next = !!on
     if (immersive.value === next) return
     immersive.value = next
-    document.documentElement.classList.toggle('stage-locked', next)
     if (next) lockLandscape()
     else { unlockOrientation(); resumeVideoSoon(); nextTick(layoutLive) }
 }
@@ -861,47 +860,41 @@ onBeforeUnmount(() => {
 }
 .fs-btn:hover { color: var(--gold); border-color: var(--gold-line); background: rgba(10,14,20,.92); }
 
-/* 全屏：两种模式共用「铺满视口」的样式
-   ① 浏览器全屏 → :fullscreen  ② CSS 沉浸式 → .immersive（iPhone / 应用内浏览器） */
+/* 全屏：两种模式共用「铺满视口 + 最上层」的样式
+   ① 浏览器全屏 → :fullscreen  ② CSS 沉浸式 → .immersive（iPhone / 应用内浏览器）
+   同时 .is-fs 加在 .student 上，让顶栏和右栏在两种全屏模式下都消失 */
 .video-stage:fullscreen,
 .video-stage:-webkit-full-screen,
 .video-stage.immersive {
   position: fixed;
-  left: 50%; top: 50%;
+  left: 0; top: 0;
   width: 100vw; height: 100vh;
+  width: 100dvw; height: 100dvh;
   max-width: none; max-height: none;
   aspect-ratio: auto;
   margin: 0; border: 0; border-radius: 0;
   background: #000;
-  z-index: 9998;
-  transform: translate(-50%, -50%);
+  z-index: 10001;
 }
-/* 全屏时画面用 contain —— 全幅内容可见，不裁掉讲课内容 */
-/* 全屏时画面铺满屏幕不留黑边（16:9 内容在竖屏手机两侧微微裁掉，比黑边观感好） */
 .video-stage:fullscreen video,
 .video-stage:-webkit-full-screen video,
 .video-stage.immersive video { object-fit: cover; }
 .video-stage::backdrop { background: #000; }
 
-/* 全屏就是「干净看画面」：连接提示一律收起，只留视频本身和退出按钮 */
+/* 全屏时隐藏顶栏和右栏，只留视频 + 退出按钮 */
+.student.is-fs .topbar,
+.student.is-fs .live-rail,
+.student.is-fs .connect-zone,
+.student.is-fs .audio-bar { display: none; }
+
+/* 全屏时隐藏连接提示（在框内，不需要） */
 .video-stage:fullscreen .video-hint,
 .video-stage:-webkit-full-screen .video-hint,
 .video-stage.immersive .video-hint { display: none; }
 
-/* 竖着拿手机又没进真全屏（拿不到方向锁定）：把画面转 90°，
-   用户把手机横过来就是满屏，不用等系统转屏。只对触屏生效，桌面不动。 */
-@media (orientation: portrait) {
-  html.is-touch .video-stage.immersive {
-    width: 100vh; height: 100vw;
-    width: 100dvh; height: 100dvw;
-    transform: translate(-50%, -50%) rotate(90deg);
-  }
-}
-
-/* 沉浸式下的浮层（在旋转容器外面，永远正着）——整个全屏里只有这一个控件。
-   放右下角、做小一点（图标按钮），不挡画面主体；转 90° 后仍能按到。 */
+/* 退出按钮：fixed 定位，z-index 高于视频层（10001），始终可见 */
 .immersive-exit {
-  position: fixed; z-index: 10000;
+  position: fixed; z-index: 10002;
   bottom: calc(env(safe-area-inset-bottom, 0px) + .9rem);
   right: calc(env(safe-area-inset-right, 0px) + .9rem);
   display: inline-flex; align-items: center; justify-content: center;
