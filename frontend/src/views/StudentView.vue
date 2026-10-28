@@ -878,7 +878,7 @@ onBeforeUnmount(() => {
 }
 .video-stage:fullscreen video,
 .video-stage:-webkit-full-screen video,
-.video-stage.immersive video { object-fit: cover; }
+.video-stage.immersive video { object-fit: contain; }
 .video-stage::backdrop { background: #000; }
 
 /* 全屏时隐藏顶栏和右栏，只留视频 + 退出按钮 */
