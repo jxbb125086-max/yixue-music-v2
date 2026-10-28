@@ -60,17 +60,12 @@
             <video ref="videoRef" autoplay playsinline></video>
             <div v-if="!connected" class="video-hint"><span class="spinner"></span>正在连接老师的画面…</div>
             <button v-if="needTap" class="resume-btn" @click="resumeVideo">▶ 点击继续播放</button>
-            <button v-if="!immersive" class="fs-btn" :class="{ on: nativeFs }" @click="toggleFullscreen"
-              :title="nativeFs ? '退出全屏（Esc）' : '全屏观看'">
-              <svg v-if="!nativeFs" viewBox="0 0 24 24" width="16" height="16" fill="none"
+            <button v-if="!nativeFs && !immersive" class="fs-btn" @click="toggleFullscreen" title="全屏观看">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none"
                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M9 4H4v5M15 4h5v5M15 20h5v-5M9 20H4v-5" />
               </svg>
-              <svg v-else viewBox="0 0 24 24" width="16" height="16" fill="none"
-                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M4 9h5V4M20 9h-5V4M20 15h-5v5M4 15h5v5" />
-              </svg>
-              <span>{{ nativeFs ? '退出全屏' : '全屏' }}</span>
+              <span>全屏</span>
             </button>
           </div>
         </div>
@@ -107,8 +102,8 @@
         </div>
       </div>
 
-      <!-- 沉浸式全屏时的浮层：右下角圆形小按钮，画面之外不放其它东西 -->
-      <template v-if="immersive">
+      <!-- 全屏时的退出按钮：nativeFs（浏览器全屏）和 immersive（CSS 沉浸式）都显示 -->
+      <template v-if="immersive || nativeFs">
         <button class="immersive-exit" @click="toggleFullscreen" title="退出全屏">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
             stroke-linecap="round" stroke-linejoin="round">
@@ -865,18 +860,6 @@ onBeforeUnmount(() => {
   backdrop-filter: blur(8px); transition: all .15s;
 }
 .fs-btn:hover { color: var(--gold); border-color: var(--gold-line); background: rgba(10,14,20,.92); }
-.fs-btn.on { color: var(--gold); border-color: var(--gold-line); }
-
-/* 全屏退出按钮：浏览器全屏时固定在视口右下角，z-index 高于全屏容器 */
-.fs-btn {
-  position: fixed; z-index: 9999;
-  bottom: calc(env(safe-area-inset-bottom, 0px) + 1rem);
-  right: calc(env(safe-area-inset-right, 0px) + 1rem);
-}
-.video-stage:fullscreen ~ .fs-btn,
-.video-stage:-webkit-full-screen ~ .fs-btn {
-  display: none; /* 原生全屏时退出按钮由浏览器提供，用 Esc 退出 */
-}
 
 /* 全屏：两种模式共用「铺满视口」的样式
    ① 浏览器全屏 → :fullscreen  ② CSS 沉浸式 → .immersive（iPhone / 应用内浏览器） */
@@ -894,9 +877,10 @@ onBeforeUnmount(() => {
   transform: translate(-50%, -50%);
 }
 /* 全屏时画面用 contain —— 全幅内容可见，不裁掉讲课内容 */
+/* 全屏时画面铺满屏幕不留黑边（16:9 内容在竖屏手机两侧微微裁掉，比黑边观感好） */
 .video-stage:fullscreen video,
 .video-stage:-webkit-full-screen video,
-.video-stage.immersive video { object-fit: contain; }
+.video-stage.immersive video { object-fit: cover; }
 .video-stage::backdrop { background: #000; }
 
 /* 全屏就是「干净看画面」：连接提示一律收起，只留视频本身和退出按钮 */
