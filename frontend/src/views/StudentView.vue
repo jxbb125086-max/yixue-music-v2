@@ -376,10 +376,10 @@ async function toggleFullscreen() {
 
     if (el.requestFullscreen || el.webkitRequestFullscreen) {
         try {
-            // 先锁方向再进全屏，让浏览器在横屏状态下开全屏（部分设备需要这个顺序）
-            lockLandscape()
             if (el.requestFullscreen) await el.requestFullscreen({ navigationUI: 'hide' })
             else await el.webkitRequestFullscreen()
+            // 全屏成功后锁方向，等浏览器完成过渡后再锁
+            lockLandscape()
             resumeVideoSoon()
             return
         } catch (e) { /* 被拒 → 退回 CSS 沉浸式 */ }
@@ -445,7 +445,7 @@ function bindVideoGuards() {
 function onVisibility() { if (!document.hidden) resumeVideoSoon() }
 function onFullscreenChange() {
     nativeFs.value = !!fsElement()
-    if (nativeFs.value) lockLandscape()    // 进入全屏后再锁方向，确保浏览器已完成过渡
+    if (nativeFs.value) lockLandscape()      // 进入全屏后锁方向
     else unlockOrientation()
     resumeVideoSoon()   // ← 关键：进出全屏都立刻续播
     nextTick(layoutLive)
@@ -867,6 +867,17 @@ onBeforeUnmount(() => {
 .fs-btn:hover { color: var(--gold); border-color: var(--gold-line); background: rgba(10,14,20,.92); }
 .fs-btn.on { color: var(--gold); border-color: var(--gold-line); }
 
+/* 全屏退出按钮：浏览器全屏时固定在视口右下角，z-index 高于全屏容器 */
+.fs-btn {
+  position: fixed; z-index: 9999;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 1rem);
+  right: calc(env(safe-area-inset-right, 0px) + 1rem);
+}
+.video-stage:fullscreen ~ .fs-btn,
+.video-stage:-webkit-full-screen ~ .fs-btn {
+  display: none; /* 原生全屏时退出按钮由浏览器提供，用 Esc 退出 */
+}
+
 /* 全屏：两种模式共用「铺满视口」的样式
    ① 浏览器全屏 → :fullscreen  ② CSS 沉浸式 → .immersive（iPhone / 应用内浏览器） */
 .video-stage:fullscreen,
@@ -882,10 +893,10 @@ onBeforeUnmount(() => {
   z-index: 9998;
   transform: translate(-50%, -50%);
 }
-/* 全屏时画面用 cover —— 满屏无黑边，16:9 内容在竖屏手机两侧裁掉一点点，比黑边好看 */
+/* 全屏时画面用 contain —— 全幅内容可见，不裁掉讲课内容 */
 .video-stage:fullscreen video,
 .video-stage:-webkit-full-screen video,
-.video-stage.immersive video { object-fit: cover; }
+.video-stage.immersive video { object-fit: contain; }
 .video-stage::backdrop { background: #000; }
 
 /* 全屏就是「干净看画面」：连接提示一律收起，只留视频本身和退出按钮 */
