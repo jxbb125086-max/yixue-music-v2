@@ -731,9 +731,7 @@ function openKeyOpts(f) {
   });
 }
 
-/* 琴键源用 webview 内嵌。尺寸完全交给 CSS（.fbody webview { display:flex; width/height:100% }）——
-   webview 的影子 iframe 靠 flex 撑高，一旦被设成 display:block 就会退回 Chromium 默认的 150px 高，
-   表现为竖屏下琴键画面被压扁、框内下方留白。不要再用 JS 去写死像素宽高。 */
+/* 网页版用 iframe 内嵌琴键源，尺寸由 CSS .fbody iframe 控制 */
 
 /* ---------- 各类源的内容填充 ---------- */
 function fillBody(f, body) {
@@ -1314,7 +1312,7 @@ async function loadSources() {
     return;
   }
   if (!sources.length) {
-    srcList.innerHTML = '<div class="src-empty">没有可采集的窗口。<br><br>1. 确认目标程序已打开且窗口未最小化<br>2. 到 系统设置 → 隐私与安全性 → 屏幕录制 确认本程序已勾选，然后点「授权后重启」<br><br><button class="fbtn" data-relaunch="1">授权后重启应用</button></div>';
+    srcList.innerHTML = '<div class="src-empty">没有可采集的窗口。<br><br>请确认目标窗口已打开且未最小化，然后点「重新扫描」<br><br><button class="fbtn" data-relaunch="1">重新扫描</button></div>';
     return;
   }
   srcList.innerHTML = '';
@@ -1660,7 +1658,7 @@ function draggableModal(panel, handle) {
   });
 }
 
-/* ================= 键盘快捷键 ================= */
+/* 键盘快捷键（Tab/Esc 隐藏快捷键已取消，只剩删除/微调） */
 document.addEventListener('keydown', e => {
   const t = e.target && e.target.tagName;
   if (t === 'INPUT' || t === 'SELECT' || t === 'TEXTAREA') return;
@@ -1691,20 +1689,15 @@ canvas.addEventListener('pointerdown', e => {
 
 /* ================= 启动 ================= */
 (async function boot() {
-  // 隐藏模式兜底开关（工具栏隐藏后仍能退出）
-  if (window.compositor.onToggleLive) {
-    window.compositor.onToggleLive(() => setHide(!isHide()));
-  }
-
   ['#srcModal', '#camModal'].forEach(sel => {
     const m = $(sel);
     if (m) draggableModal(m.querySelector('.modal-box'), m.querySelector('.modal-head'));
   });
   // 先把画布定成 16:9 —— 必须在 restore() 之前，否则框体会按错误尺寸摆放
   layoutCanvas();
-  // 嵌入模式（被 TeachingHall 等父页面当排版台用）下，启动时强制显示：
-  // 隐藏与否完全交给老师手动控制（点「隐藏」按钮），不该自动进入隐藏态，
-  // 避免上次退出时存下来的 hide=true 导致这次一进来就看不到框体标签
+/* 嵌入模式（被 TeachingHall 等父页面当排版台用）下，启动时强制显示：
+   隐藏与否完全交给老师手动控制（点「隐藏」按钮），不该自动进入隐藏态，
+   避免上次退出时存下来的 hide=true 导致这次一进来就看不到框体标签 */
   const embedded = window.parent && window.parent !== window;
   if (ui.hide && !embedded) {
     document.body.classList.add('hide-ui');
@@ -1712,6 +1705,8 @@ canvas.addEventListener('pointerdown', e => {
     showHideHint(3000);   // 一进来就告诉你怎么退出去
   } else if (embedded && ui.hide) {
     ui.hide = false; saveUI();
+    document.body.classList.remove('hide-ui');   // 强制显示，不继承上次的隐藏态
+    $('#optLive').classList.remove('on');
   }
   // 窗口尺寸变化 / 工具栏换行时：重算 16:9 画布，再把框体收回画布内
   let rzTimer = null;

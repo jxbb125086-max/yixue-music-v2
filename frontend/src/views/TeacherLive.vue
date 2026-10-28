@@ -688,8 +688,7 @@ function toolAction(action) {
     try { win.postMessage({ type: 'TOOLBAR_ACTION', action }, '*') } catch (e) { /* 忽略 */ }
 }
 
-/* 「隐藏」开关：老师手动控制，隐藏/显示所有框体的标签、边框和编辑工具条。
-   隐藏时学员看到的是干净画面；状态用按钮底色变化表示（亮=已隐藏）。 */
+/* 「隐藏」开关：老师手动控制，隐藏/显示所有框体的标签、边框和编辑工具条。 */
 function toggleStageUiHidden() {
     stageUiHidden.value = !stageUiHidden.value
     sendHideToComposer()
@@ -701,8 +700,7 @@ function sendHideToComposer() {
     try { win.postMessage({ type: 'SET_HIDE', on: stageUiHidden.value, manual: true }, '*') } catch (e) { /* 忽略 */ }
 }
 
-/* 接收排版台回报的隐藏状态：当在框内按 Tab/Esc 或点框内「隐藏」按钮时，
-   工具条的「隐藏」按钮颜色也要跟着变，两处始终保持一致。 */
+/* 接收排版台回报的隐藏状态，保持工具条「隐藏」按钮 title 与框内状态一致。 */
 function onComposerMessage(e) {
     if (!e.data || typeof e.data !== 'object') return
     if (e.data.type === 'HIDE_STATE') stageUiHidden.value = !!e.data.on
@@ -905,9 +903,9 @@ onMounted(async () => {
 onBeforeUnmount(() => {
     document.removeEventListener('click', onDocClick)
     window.removeEventListener('message', onComposerMessage)
-    if (fsElement()) { try { (document.exitFullscreen || document.webkitExitFullscreen).call(document) } catch (e) { } }
-    setImmersive(false)
-    unlockOrientation()
+    if (navigator.mediaDevices) {
+      try { navigator.mediaDevices.removeEventListener('devicechange', getAudioDevices) } catch (_) {}
+    }
     unwatchLiveLayout()
     if (isRecording.value) stopRecording()
     socketClosed = true
@@ -924,23 +922,6 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .salon { width: 100%; min-height: 100%; min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; }
-
-/* 上课中：排版台 iframe 必须继续渲染（屏幕捕获要抓它），
-   所以不 display:none，而是固定铺满页面、压到最底层，由 live 页面盖住。
-   注意不能设 opacity/visibility —— 那样捕获出来就是黑的。 */
-.prep.prep-ghost {
-  position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 0;
-  pointer-events: none;
-  background: var(--bg);
-}
-.prep.prep-ghost .prep-sidebar { display: none; }
-/* 固定成 1280×720（16:9）：捕获画面尺寸稳定，学员端不会随老师窗口大小变形 */
-.prep.prep-ghost .prep-layout { display: block; }
-.prep.prep-ghost .composer-panel {
-  position: absolute; left: 0; top: 0;
-  width: 1280px; height: 760px;   /* 40px 标题栏 + 720px 画面 = 16:9 */
-  border-radius: 0; border: none;
-}
 
 /* ═══ 顶栏 ═══ */
 .topbar {
@@ -1047,34 +1028,12 @@ onBeforeUnmount(() => {
 .step-actions { display: flex; gap: .9rem; justify-content: flex-end; margin-top: 2rem; }
 .step-actions .el-button { min-width: 8rem; height: 2.9rem; font-size: 1rem; }
 
-/* ═══ 排版台面板 ═══ */
-.composer-panel {
-  flex: 1; min-width: 0; display: flex; flex-direction: column;
-  background: #1a1d23; border-radius: var(--r-lg); overflow: hidden;
-  border: 1px solid rgba(255,255,255,.08);
-}
-.composer-header {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: .7rem 1rem; background: rgba(0,0,0,.3); border-bottom: 1px solid rgba(255,255,255,.08);
-  flex-shrink: 0;
-}
-.composer-title { font-size: .95rem; font-weight: 600; color: #e9ecf2; }
-.composer-hint { font-size: .75rem; color: #9aa3b2; }
-.composer-viewport {
-  flex: 1; min-height: 0; position: relative;
-}
-.composer-iframe {
-  position: absolute; top: 0; right: 0; bottom: 0; left: 0; width: 100%; height: 100%; border: none;
-  background: #0f1216;
-}
-
 /* ═══ ③ 上课中 ═══
    主列宽度由 JS 锁成「画面宽度」，右栏 flex 吃掉所有剩余宽度 —— 任何窗口尺寸都不会
    在画面和右栏之间留下空白（画面是 16:9，扁窗口下会被高度卡住而比整列窄）。 */
 .live {
   flex: 1; display: flex; gap: 1rem; padding: 1rem 1.4rem 1.4rem;
   min-height: 0;
-  /* 盖住底层的 .prep-ghost（排版台仍在渲染，用于屏幕捕获） */
   position: relative; z-index: 1; background: var(--bg);
 }
 .live-main {

@@ -28,7 +28,7 @@ const turnUrl = import.meta.env.VITE_TURN_URL
 const turnUser = import.meta.env.VITE_TURN_USER
 const turnPass = import.meta.env.VITE_TURN_PASS
 
-export const ICE_SERVERS = [
+const ICE_SERVERS = [
     { urls: STUN },
     ...(turnUrl && turnUser
         ? [{
@@ -38,9 +38,6 @@ export const ICE_SERVERS = [
         }]
         : [])
 ]
-
-/** 是否配了 TURN（UI 上可以据此提示"当前只能走 P2P 直连"） */
-export const HAS_TURN = !!(turnUrl && turnUser)
 
 /** 统一构造 SimplePeer 的 config，避免两端配置漂移 */
 export function rtcConfig() {

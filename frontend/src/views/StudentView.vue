@@ -727,6 +727,7 @@ onBeforeUnmount(() => {
     document.removeEventListener('webkitfullscreenchange', onFullscreenChange)
     document.removeEventListener('visibilitychange', onVisibility)
     document.removeEventListener('keydown', onKeydown)
+    try { if (navigator.mediaDevices) navigator.mediaDevices.removeEventListener('devicechange', getAudioDevices) } catch (_) {}
     unbindWideMq()
     if (fsElement()) { try { (document.exitFullscreen || document.webkitExitFullscreen).call(document) } catch (e) { } }
     setImmersive(false)

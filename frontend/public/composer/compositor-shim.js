@@ -47,12 +47,6 @@
 
     log(msg) {
       console.log('[compositor]', msg);
-    },
-
-    onToggleLive(cb) {
-      // 键盘监听由 app.js 统一处理（Tab/Esc），shim 不再重复绑定
-      // 保留接口仅为兼容 app.js 的调用，实际无操作
-      window.__compositorLiveToggle = cb;
     }
   };
 
