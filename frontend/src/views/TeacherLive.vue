@@ -411,9 +411,20 @@ function watchLiveLayout() {
     liveRO.observe(live)
     // 首帧音频条可能先换行再回单行，量两遍就稳了
     requestAnimationFrame(() => { layoutLive(); requestAnimationFrame(layoutLive) })
+    // 浏览器全屏/退出全屏时，ResizeObserver 不一定触发，额外监听全屏事件
+    function onFsChange() { layoutLive() }
+    document.addEventListener('fullscreenchange', onFsChange)
+    document.addEventListener('webkitfullscreenchange', onFsChange)
+    live._fsListeners = { onFsChange, docFs: onFsChange }
 }
 function unwatchLiveLayout() {
     if (liveRO) { liveRO.disconnect(); liveRO = null }
+    const live = liveRef.value
+    if (live && live._fsListeners) {
+        document.removeEventListener('fullscreenchange', live._fsListeners.onFsChange)
+        document.removeEventListener('webkitfullscreenchange', live._fsListeners.docFs)
+        live._fsListeners = null
+    }
 }
 
 // ── 学员音频播放（学生连线的声音）──
