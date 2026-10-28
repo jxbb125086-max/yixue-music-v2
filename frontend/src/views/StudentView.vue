@@ -378,7 +378,7 @@ async function toggleFullscreen() {
         try {
             if (el.requestFullscreen) await el.requestFullscreen({ navigationUI: 'hide' })
             else await el.webkitRequestFullscreen()
-            lockLandscape()
+            // 方向锁定移入 onFullscreenChange，等浏览器真正完成全屏后再锁
             resumeVideoSoon()
             return
         } catch (e) { /* 被拒 → 退回 CSS 沉浸式 */ }
@@ -443,7 +443,8 @@ function bindVideoGuards() {
 function onVisibility() { if (!document.hidden) resumeVideoSoon() }
 function onFullscreenChange() {
     nativeFs.value = !!fsElement()
-    if (!nativeFs.value) unlockOrientation()
+    if (nativeFs.value) lockLandscape()    // 进入全屏后再锁方向，确保浏览器已完成过渡
+    else unlockOrientation()
     resumeVideoSoon()   // ← 关键：进出全屏都立刻续播
     nextTick(layoutLive)
 }
