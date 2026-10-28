@@ -376,13 +376,15 @@ async function toggleFullscreen() {
 
     if (el.requestFullscreen || el.webkitRequestFullscreen) {
         try {
+            // 先锁方向再进全屏，让浏览器在横屏状态下开全屏（部分设备需要这个顺序）
+            lockLandscape()
             if (el.requestFullscreen) await el.requestFullscreen({ navigationUI: 'hide' })
             else await el.webkitRequestFullscreen()
-            // 方向锁定移入 onFullscreenChange，等浏览器真正完成全屏后再锁
             resumeVideoSoon()
             return
         } catch (e) { /* 被拒 → 退回 CSS 沉浸式 */ }
     }
+    // iPhone/微信：不支持 requestFullscreen，用 CSS 沉浸式 + 手动锁向
     setImmersive(true)
 }
 
@@ -880,10 +882,10 @@ onBeforeUnmount(() => {
   z-index: 9998;
   transform: translate(-50%, -50%);
 }
-/* 全屏时画面用 contain —— 宁可两侧留黑边，也不裁掉讲课内容 */
+/* 全屏时画面用 cover —— 满屏无黑边，16:9 内容在竖屏手机两侧裁掉一点点，比黑边好看 */
 .video-stage:fullscreen video,
 .video-stage:-webkit-full-screen video,
-.video-stage.immersive video { object-fit: contain; }
+.video-stage.immersive video { object-fit: cover; }
 .video-stage::backdrop { background: #000; }
 
 /* 全屏就是「干净看画面」：连接提示一律收起，只留视频本身和退出按钮 */
