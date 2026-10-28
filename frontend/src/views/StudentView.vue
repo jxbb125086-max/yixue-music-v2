@@ -309,7 +309,7 @@ function fitStage() {
 function layoutLive() {
     const live = liveRef.value, area = areaRef.value, main = mainRef.value
     if (!live || !area || !main || !live.isConnected) return
-    if (immersive.value || nativeFs.value) { fitStage(); return }       // 全屏时画面铺满视口，不用算
+    if (immersive.value || nativeFs.value) return                     // 全屏时 CSS 铺满视口，不需要 JS 计算
     if (window.innerWidth < 900) { main.style.width = ''; fitStage(); return }  // 单列布局
     const availH = area.clientHeight
     if (availH < 120) return
@@ -727,7 +727,7 @@ onBeforeUnmount(() => {
     try { if (navigator.mediaDevices) navigator.mediaDevices.removeEventListener('devicechange', getAudioDevices) } catch (_) {}
     unbindWideMq()
     if (fsElement()) { try { (document.exitFullscreen || document.webkitExitFullscreen).call(document) } catch (e) { } }
-    setImmersive(false)
+    immersive.value = false
     unlockOrientation()
     unwatchLiveLayout()
     disconnectAll()
@@ -737,7 +737,7 @@ onBeforeUnmount(() => {
 <style scoped>
 /* 兜底顺序很讲究：老 WebView 认 100vh 不认 100dvh；新浏览器（地址栏伸缩）认 100dvh。
    最后写 dvh，认它的支持它；不支持的机型就停在前面的 100% 兜底上，保证永远有高度。 */
-.student { width: 100%; min-height: 100%; min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; }
+.student { width: 100%; min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; }
 
 /* ═══ 老款安卓降级（由 detectLegacyWebView() 打上 class）═══
    flex gap 在 Chrome < 84 无效，卡片会全贴在一起 → 用 margin 顶替 */
@@ -1099,7 +1099,7 @@ onBeforeUnmount(() => {
     overflow-y: auto; -webkit-overflow-scrolling: touch;
   }
   .live-main { flex: none; display: flex; flex-direction: column; }
-  .stage-area { flex: none; display: block; container-type: normal; }
+  .stage-area { flex: none; display: block; }
   /* 画面按 16:9 走，宽度随视口。窄手机(≤640)用 100%；
      平板(641–899)限到 72% 宽，避免 4:3 大屏下画面太高把聊天挤没 */
   .video-stage { width: 100%; }
