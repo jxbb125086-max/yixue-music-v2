@@ -166,7 +166,12 @@
         </div>
 
         <div class="audio-strip card">
-          <!-- 直播已改为自动开播，进入大厅时即开始推流，无需手动按钮 -->
+          <!-- 直播开关：灰灯=未开播，红灯亮=直播中 -->
+          <button class="live-toggle" :class="{ on: pushing }" @click="togglePush"
+                  :title="pushing ? '点击停止直播，学员立刻看不到画面' : '点击开始直播，学员能看到画面'">
+            <span class="live-dot"></span>
+            <span class="live-label">直播</span>
+          </button>
           <div class="strip-group">
             <span class="strip-label">麦克风</span>
             <el-select v-model="selectedMic" class="strip-select" size="small" @change="onMicChange">
@@ -281,9 +286,8 @@ const teacherName = ref('')
 
 // ── 第3步：选内容 ──
 const contentOptions = [
-    { id: 'composer', icon: '🎼', name: '排版',     desc: '琴键 + 文字 + 图片，自由拖拽排版',     src: '/composer/index.html' },
-    { id: 'web',      icon: '🌐', name: '网页',     desc: '共享你当前浏览器标签页里的内容',        src: null },
-    { id: 'keys',     icon: '🎹', name: '琴键',     desc: '只显示 MIDI 琴键，画面最干净',           src: '/sources/keys/index.html' }
+    { id: 'composer', icon: '🎼', name: '排版', desc: '琴键 + 文字 + 图片，自由拖拽排版', src: '/composer/index.html' },
+    { id: 'web',    icon: '🌐', name: 'Chrome 标签页', desc: '共享你当前浏览器里已打开的标签页', src: null }
 ]
 const selectedContent = ref('composer')
 const stageSrc = computed(() => {
@@ -304,8 +308,7 @@ const chatScroll = ref(null)
 const currentRoomId = ref('')
 const classUrl = ref('')
 const isClassStarted = ref(false)
-const preparing = ref(false)      // 自动开播 loading
-const autoStartLiveOnLoaded = ref(false)  // iframe 加载完后自动开播
+const preparing = ref(false)      // 「直播」开关 loading
 const onlineUsers = ref([])
 const speakingId = ref(null)
 const speakingStatus = ref(null)
@@ -627,15 +630,11 @@ function enterPrep() {
 function onStageLoaded() {
     console.log('[TeacherLive] 教学框已加载，内容=' + selectedContent.value)
     nextTick(layoutLive)
-    // 排版/琴键模式：iframe 加载完自动开播
-    if (autoStartLiveOnLoaded.value) {
-        autoStartLiveOnLoaded.value = false
-        startPush()
-    }
 }
 
 /* ══════ 第4步：进入教学大厅 ══════
-   选完内容直接进大厅，iframe 加载完成后自动开播（无需手动点直播按钮）。 */
+   进大厅即建房，学员能提前加入并看到「老师正在准备」的等待状态。
+   老师觉得可以了再点「开始直播」。 */
 function enterHall() {
     stage.value = 'live'
     isClassStarted.value = true
@@ -644,15 +643,6 @@ function enterHall() {
         requestAnimationFrame(() => { layoutLive(); layoutLive() })
     })
     connectSignaling()
-    // 根据所选内容决定如何开播
-    const sel = selectedContent.value
-    if (sel === 'web') {
-        // 网页模式：立即抓当前标签页，不裁切
-        startPush({ isWeb: true })
-    } else {
-        // 排版 / 琴键：等 iframe 加载完再开播
-        autoStartLiveOnLoaded.value = true
-    }
 }
 
 function connectSignaling() {
@@ -739,8 +729,13 @@ function setStageUiHidden(on) {
 }
 
 /* ══════ 直播开关 ══════
-   进入大厅后自动开播（无需手动按钮）。
-   若老师用浏览器自带的「停止共享」断开，会自动调用 stopPush 恢复。 */
+   不按「开始直播」学员看不到教学框内容（但能看到「老师正在准备」）；
+   按下才把教学框直播给学员，随时可以停。 */
+async function togglePush() {
+    if (pushing.value) { stopPush(); return }
+    await startPush()
+}
+
 async function startPush(options = {}) {
     if (preparing.value) return
     preparing.value = true
@@ -1072,8 +1067,8 @@ onBeforeUnmount(() => {
 .step-actions { display: flex; gap: .9rem; justify-content: flex-end; margin-top: 2rem; }
 .step-actions .el-button { min-width: 8rem; height: 2.9rem; font-size: 1rem; }
 
-/* 选内容：三张卡片 */
-.content-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
+/* 选内容：两张卡片 */
+.content-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; }
 .content-item {
   display: flex; flex-direction: column; gap: .45rem; align-items: flex-start;
   border: 1px solid var(--line-2); border-radius: var(--r-md); padding: 1.3rem 1.2rem;
