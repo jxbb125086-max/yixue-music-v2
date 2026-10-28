@@ -166,12 +166,7 @@
         </div>
 
         <div class="audio-strip card">
-          <!-- 直播开关：灰灯=未开播，红灯亮=直播中；放在控制条里，不遮挡教学框 -->
-          <button class="live-toggle" :class="{ on: pushing }" @click="togglePush"
-                  :title="pushing ? '点击停止直播，学员立刻看不到画面' : '点击开始直播，学员能看到画面'">
-            <span class="live-dot"></span>
-            <span class="live-label">直播</span>
-          </button>
+          <!-- 直播已改为自动开播，进入大厅时即开始推流，无需手动按钮 -->
           <div class="strip-group">
             <span class="strip-label">麦克风</span>
             <el-select v-model="selectedMic" class="strip-select" size="small" @change="onMicChange">
@@ -286,9 +281,9 @@ const teacherName = ref('')
 
 // ── 第3步：选内容 ──
 const contentOptions = [
-    { id: 'composer', icon: '🎼', name: '教学排版台', desc: '琴键 + 文字 + 图片，自由拖拽排版', src: '/composer/index.html' },
-    { id: 'keys', icon: '🎹', name: '琴键可视化', desc: '只显示 MIDI 琴键，画面最干净', src: '/sources/keys/index.html' },
-    { id: 'blank', icon: '⬜', name: '空白画布', desc: '从零开始，需要什么自己加', src: '/composer/index.html?blank=1' }
+    { id: 'composer', icon: '🎼', name: '排版',     desc: '琴键 + 文字 + 图片，自由拖拽排版',     src: '/composer/index.html' },
+    { id: 'web',      icon: '🌐', name: '网页',     desc: '共享你当前浏览器标签页里的内容',        src: null },
+    { id: 'keys',     icon: '🎹', name: '琴键',     desc: '只显示 MIDI 琴键，画面最干净',           src: '/sources/keys/index.html' }
 ]
 const selectedContent = ref('composer')
 const stageSrc = computed(() => {
@@ -309,7 +304,8 @@ const chatScroll = ref(null)
 const currentRoomId = ref('')
 const classUrl = ref('')
 const isClassStarted = ref(false)
-const preparing = ref(false)      // 「直播」开关 loading
+const preparing = ref(false)      // 自动开播 loading
+const autoStartLiveOnLoaded = ref(false)  // iframe 加载完后自动开播
 const onlineUsers = ref([])
 const speakingId = ref(null)
 const speakingStatus = ref(null)
@@ -631,11 +627,15 @@ function enterPrep() {
 function onStageLoaded() {
     console.log('[TeacherLive] 教学框已加载，内容=' + selectedContent.value)
     nextTick(layoutLive)
+    // 排版/琴键模式：iframe 加载完自动开播
+    if (autoStartLiveOnLoaded.value) {
+        autoStartLiveOnLoaded.value = false
+        startPush()
+    }
 }
 
 /* ══════ 第4步：进入教学大厅 ══════
-   大厅进来不推流：老师先在里面排版，觉得可以了再点「推流」。
-   进大厅即建房，学员能提前加入并看到「老师正在准备」的等待状态。 */
+   选完内容直接进大厅，iframe 加载完成后自动开播（无需手动点直播按钮）。 */
 function enterHall() {
     stage.value = 'live'
     isClassStarted.value = true
@@ -644,6 +644,15 @@ function enterHall() {
         requestAnimationFrame(() => { layoutLive(); layoutLive() })
     })
     connectSignaling()
+    // 根据所选内容决定如何开播
+    const sel = selectedContent.value
+    if (sel === 'web') {
+        // 网页模式：立即抓当前标签页，不裁切
+        startPush({ isWeb: true })
+    } else {
+        // 排版 / 琴键：等 iframe 加载完再开播
+        autoStartLiveOnLoaded.value = true
+    }
 }
 
 function connectSignaling() {
@@ -672,16 +681,19 @@ function connectSignaling() {
 }
 
 /* 教学框里是 DOM 排版台（#canvas 是个 div），拿不到 captureStream。
-   直播只能走「屏幕捕获 + CropTarget 裁剪到教学框」：
-   老师授权一次「此标签页」，学员看到的就只有教学框里的内容，工具栏一律不进画面。 */
-async function acquireStageCapture() {
+   直播走「屏幕捕获 + CropTarget 裁剪到教学框」：
+   isWeb=true 时不裁切，直接共享当前标签页（网页模式）。 */
+async function acquireStageCapture(options = {}) {
     if (!navigator.mediaDevices || typeof navigator.mediaDevices.getDisplayMedia !== 'function') {
         console.warn('[TeacherLive] 浏览器不支持屏幕捕获')
         return null
     }
     let cap = null
     try {
-        ElMessage.info('请选择「此标签页」，学员将看到教学框里的画面')
+        const hint = options.isWeb
+            ? '请选择要共享的浏览器标签页，学员将看到该标签页内容'
+            : '请选择「此标签页」，学员将看到教学框里的画面'
+        ElMessage.info(hint)
         cap = await navigator.mediaDevices.getDisplayMedia({
             video: { frameRate: 30 },
             audio: false,
@@ -693,6 +705,8 @@ async function acquireStageCapture() {
         console.warn('[TeacherLive] 屏幕捕获被取消或失败', e)
         return null
     }
+    // 网页模式：直接返回整页画面，不裁切
+    if (options.isWeb) return cap
     // 裁剪到教学框：画面里只留教学框，不含顶栏/右栏/操作条
     const track = cap.getVideoTracks()[0]
     const el = stageIframeRef.value
@@ -725,18 +739,13 @@ function setStageUiHidden(on) {
 }
 
 /* ══════ 直播开关 ══════
-   不按「开始直播」学员看不到教学框内容（但能看到「老师正在准备」）；
-   按下才把教学框直播给学员，随时可以停。 */
-async function togglePush() {
-    if (pushing.value) { stopPush(); return }
-    await startPush()
-}
-
-async function startPush() {
+   进入大厅后自动开播（无需手动按钮）。
+   若老师用浏览器自带的「停止共享」断开，会自动调用 stopPush 恢复。 */
+async function startPush(options = {}) {
     if (preparing.value) return
     preparing.value = true
     try {
-        const cap = await acquireStageCapture()
+        const cap = await acquireStageCapture(options)
         if (!cap) {
             ElMessage.warning('没有拿到画面授权，学员暂时看不到画面')
             return
