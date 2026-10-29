@@ -89,7 +89,7 @@ html, body {
 </div>
 
 <div id="camModal" class="modal hidden">
-  <div class="modal-box" style="width:min(460px,92vw)">
+  <div class="modal-box cam-box">
     <div class="modal-head">
       <span>选择镜头</span>
       <div>
@@ -97,7 +97,35 @@ html, body {
         <button id="camClose" class="tb">关闭</button>
       </div>
     </div>
-    <div id="camList" class="src-list" style="grid-template-columns:1fr"><div class="src-empty">读取中…</div></div>
+
+    <!-- ① 本机镜头 -->
+    <div class="cam-sec">
+      <div class="cam-sec-title">本机镜头 <span class="cam-sec-hint">内置 / USB / iPhone 连续互通</span></div>
+      <div id="camList" class="src-list cam-list"><div class="src-empty">读取中…</div></div>
+    </div>
+
+    <!-- ② 网络互联相机 -->
+    <div class="cam-sec">
+      <div class="cam-sec-title">
+        网络互联相机
+        <span class="cam-sec-hint">局域网 IP 相机 · RTSP / ONVIF</span>
+      </div>
+      <div class="cam-net-bar">
+        <button id="camScan" class="tb primary">搜索局域网相机</button>
+        <span id="camScanHint" class="cam-hint"></span>
+      </div>
+      <div id="camNetList" class="src-list cam-list">
+        <div class="src-empty">点「搜索局域网相机」自动查找，或在下方手动填地址</div>
+      </div>
+      <div class="cam-net-bar">
+        <input id="camUrl" class="cam-input" spellcheck="false"
+               placeholder="rtsp://192.168.1.10:554/stream1" />
+        <button id="camTest" class="tb">测试</button>
+        <button id="camAddUrl" class="tb primary">添加</button>
+      </div>
+      <div class="cam-presets" id="camPresets"></div>
+      <div id="camUrlMsg" class="cam-msg"></div>
+    </div>
   </div>
 </div>
 

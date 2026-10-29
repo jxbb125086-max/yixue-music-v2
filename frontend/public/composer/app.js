@@ -209,6 +209,9 @@ function acquireWebDesktop(f, body) {
 
 /* ---------- 镜头采集 ---------- */
 function acquireCamera(f, body) {
+  // 网络互联相机：后端 ffmpeg 把 RTSP 转成 MJPEG，<img> 能原生播放
+  if (f.netUrl) { acquireNetCamera(f, body); return; }
+
   body.innerHTML = '<div class="floading">正在启动镜头…</div>';
   let done = false;
   const timer = setTimeout(() => {
@@ -244,6 +247,58 @@ function acquireCamera(f, body) {
     showErr(body, '镜头启动失败：' + esc(err.message || err.name) +
       '<br>请检查 系统设置 → 隐私与安全性 → 摄像头 权限；若其他应用正在使用镜头，请先退出。');
   });
+}
+
+/* ---------- 网络相机（MJPEG over HTTP） ---------- */
+// <img> 对 multipart/x-mixed-replace 是原生支持的：换一帧就重绘一次，
+// 延迟比 HLS 低（0.2~0.5s），也不需要额外播放器库。
+function netCamSrc(url, w, fps) {
+  const q = '?url=' + encodeURIComponent(url) + '&w=' + (w || 1280) + '&fps=' + (fps || 20);
+  return CAM_API + '/stream' + q;
+}
+
+function acquireNetCamera(f, body) {
+  body.innerHTML = '<div class="floading">正在连接网络相机…</div>';
+  let settled = false;
+
+  const img = document.createElement('img');
+  img.alt = '';
+  img.style.width = '100%';
+  img.style.height = '100%';
+  img.style.objectFit = 'contain';
+  img.style.display = 'block';
+
+  const timer = setTimeout(() => {
+    if (settled) return;
+    settled = true;
+    showErr(body, '网络相机连接超时。' +
+      '<br>请确认相机在线、地址与账号密码正确，且和本机在同一局域网。' +
+      '<div class="fbtns"><button class="fbtn" data-retry="1">重试</button></div>');
+  }, 12000);
+
+  img.onload = () => {
+    if (settled) return;
+    settled = true;
+    clearTimeout(timer);
+    body.innerHTML = '';
+    body.appendChild(img);
+    f.netImg = img;
+    // MJPEG 的第一帧尺寸就是相机的真实分辨率
+    if (img.naturalWidth && img.naturalHeight) {
+      fitFrameToAspect(f, img.naturalWidth / img.naturalHeight);
+    }
+  };
+  img.onerror = () => {
+    if (settled) return;
+    settled = true;
+    clearTimeout(timer);
+    diag('net camera failed: ' + (f.netUrl || ''));
+    showErr(body, '网络相机没有画面。' +
+      '<br>常见原因：地址路径不对、需要账号密码、相机被其他设备占满连接数。' +
+      '<div class="fbtns"><button class="fbtn" data-retry="1">重试</button></div>');
+  };
+
+  img.src = netCamSrc(f.netUrl, 1280, 20);
 }
 
 /* ================= 文字源 ================= */
@@ -890,6 +945,9 @@ function followStreamAspect(f, v) {
 function removeFrame(f) {
   try {
     if (f.stream) f.stream.getTracks().forEach(t => t.stop());
+    // 网络相机的 MJPEG 靠 <img> 的长连接维持：清空 src 让浏览器断开，
+    // 后端收到 close 事件就会杀掉对应的 ffmpeg 进程，不会留下僵尸转流。
+    if (f.netImg) { try { f.netImg.src = ''; } catch (e) {} f.netImg = null; }
     // 文件源用的是 blob: URL，删掉框体时一并释放，否则一直占着内存
     if (f.url && f.url.indexOf('blob:') === 0) { try { URL.revokeObjectURL(f.url); } catch (e) {} }
     if (f.el) f.el.remove();
@@ -1203,6 +1261,7 @@ function persist() {
   try {
     const data = frames.map(f => ({
       kind: f.kind, name: f.name, srcId: f.srcId, deviceId: f.deviceId,
+      netUrl: f.netUrl || '',
       srcName: f.srcName || '', srcApp: f.srcApp || '', isScreen: !!f.isScreen, displayId: f.displayId || '',
       url: f.url, x: f.x, y: f.y, w: f.w, h: f.h, z: f.z, baseW: f.baseW || 0,
       locked: !!f.locked,
@@ -1375,11 +1434,53 @@ srcModal.addEventListener('click', e => { if (e.target === srcModal) srcModal.cl
 // 网页版不再提供独立分享屏幕按钮，用户通过「窗口」按钮选择屏幕区域
 
 /* ================= 镜头选择 ================= */
+// 两块内容：
+//   ① 本机镜头 —— getUserMedia 能直接拿到的（内置 / USB / iPhone 连续互通）
+//   ② 网络互联相机 —— 局域网 IP 相机，走 RTSP，由后端 ffmpeg 转 MJPEG 播放
 const camModal = $('#camModal');
 const camList = $('#camList');
+const camNetList = $('#camNetList');
+const camScanHint = $('#camScanHint');
+const camUrlMsg = $('#camUrlMsg');
 
-async function openCamModal() {
-  camModal.classList.remove('hidden');
+// 生产环境 composer 与后端同源；vite 开发（5173）时指向 3000
+const CAM_API = (location.port === '5173' ? 'http://localhost:3000' : '') + '/api/camera';
+
+/** 从设备名猜类型，给用户一个直观标签 */
+function camKindOf(label) {
+  const s = String(label || '');
+  if (/iphone|ipad|连续互通|continuity/i.test(s)) return { ico: '📱', sub: 'iPhone 连续互通相机' };
+  if (/usb|外接|external|webcam/i.test(s)) return { ico: '🔌', sub: 'USB 外接镜头' };
+  if (/built.?in|内置|facetime/i.test(s)) return { ico: '💻', sub: '内置镜头' };
+  return { ico: '🎥', sub: '本机视频设备' };
+}
+
+function addCameraFrame(deviceId, name) {
+  const cw = canvas.clientWidth, ch = canvas.clientHeight;
+  const w = 320, h = 240;   // 先给个 4:3 的位，流一到就按真实画面比例自动调
+  addFrame({
+    kind: 'camera',
+    deviceId: deviceId,
+    name: '镜头 · ' + name,
+    x: cw - w - 24, y: ch - h - 24,
+    w: w, h: h
+  });
+}
+
+function addNetCameraFrame(url, name) {
+  const cw = canvas.clientWidth, ch = canvas.clientHeight;
+  const w = 400, h = 225;
+  addFrame({
+    kind: 'camera',
+    netUrl: url,
+    name: '网络相机 · ' + (name || url),
+    x: cw - w - 24, y: ch - h - 24,
+    w: w, h: h
+  });
+}
+
+/* ---- ① 本机镜头列表 ---- */
+async function loadLocalCams() {
   camList.innerHTML = '<div class="src-empty">正在读取镜头…</div>';
   // 预热：先申请一次镜头，否则系统未授权时 enumerateDevices 拿不到设备名称
   let warm = null;
@@ -1391,7 +1492,7 @@ async function openCamModal() {
       '<br><br>请检查 系统设置 → 隐私与安全性 → 摄像头 权限（或镜头是否被其他应用占用）<br><br>' +
       '<button class="fbtn" id="camRetry">重试</button></div>';
     const btn = $('#camRetry');
-    if (btn) btn.addEventListener('click', openCamModal);
+    if (btn) btn.addEventListener('click', loadLocalCams);
     return;
   }
   let cams = [];
@@ -1402,36 +1503,191 @@ async function openCamModal() {
   }
   if (warm) { try { warm.getTracks().forEach(t => t.stop()); } catch (e) {} }
   if (!cams.length) {
-    camList.innerHTML = '<div class="src-empty">没有检测到镜头<br><br>请检查设备连接后点「刷新」</div>';
+    camList.innerHTML = '<div class="src-empty">没有检测到本机镜头<br><br>' +
+      '用 iPhone 当摄像头（连续互通相机）：手机<b>锁屏</b>、立起来静止放好、靠近电脑，' +
+      '蓝牙和 Wi-Fi 都开着、与电脑登录同一个 Apple ID，几秒后这里会出现「iPhone 的摄像头」</div>';
     return;
   }
   camList.innerHTML = '';
   cams.forEach((d, i) => {
     const name = d.label || ('镜头 ' + (i + 1));
+    const k = camKindOf(d.label);
     const item = document.createElement('div');
     item.className = 'src-item';
-    item.innerHTML = '<div class="src-name" style="padding:14px 12px;font-size:13px">' + esc(name) +
-      (ui.camDeviceId === d.deviceId ? ' <span class="app">· 上次使用</span>' : '') + '</div>';
+    item.innerHTML =
+      '<span class="cam-ico">' + k.ico + '</span>' +
+      '<div class="cam-meta">' +
+        '<div class="cam-name">' + esc(name) +
+          (ui.camDeviceId === d.deviceId ? ' <span class="app">· 上次使用</span>' : '') + '</div>' +
+        '<div class="cam-sub">' + esc(k.sub) + '</div>' +
+      '</div>';
     item.addEventListener('click', () => {
       camModal.classList.add('hidden');
       ui.camDeviceId = d.deviceId;
       saveUI();
       diag('camera selected: ' + name + ' (' + d.deviceId + ')');
-      const cw = canvas.clientWidth, ch = canvas.clientHeight;
-      const w = 320, h = 240;   // 先给个 4:3 的位，流一到就按真实画面比例自动调
-      addFrame({
-        kind: 'camera',
-        deviceId: d.deviceId,
-        name: '镜头 · ' + name,
-        x: cw - w - 24, y: ch - h - 24,
-        w: w, h: h
-      });
+      addCameraFrame(d.deviceId, name);
     });
     camList.appendChild(item);
   });
 }
+
+/* ---- ② 网络相机：搜索 / 测试 / 添加 ---- */
+
+// 常见厂商的默认 RTSP 路径：多数 IP 相机只要知道品牌就能拼出可用地址
+const CAM_PRESETS = [
+    { label: '海康', path: '/Streaming/Channels/101' },
+    { label: '大华', path: '/cam/realmonitor?channel=1&subtype=0' },
+    { label: 'TP-Link', path: '/stream1' },
+    { label: '小米', path: '/live/ch0' },
+    { label: 'Axis', path: '/axis-media/media.amp' }
+];
+
+function renderPresets() {
+  const box = $('#camPresets');
+  if (!box) return;
+  box.innerHTML = '<span class="cam-hint">常用路径：</span>';
+  CAM_PRESETS.forEach(p => {
+    const b = document.createElement('button');
+    b.className = 'cam-chip';
+    b.textContent = p.label;
+    b.title = '填入 rtsp://admin:密码@相机IP:554' + p.path;
+    b.addEventListener('click', () => {
+      const cur = camUrl.value.trim();
+      // 已经填了 IP 就只替换路径部分，否则给一个模板
+      const m = cur.match(/^(rtsps?:\/\/[^/]*)/i);
+      camUrl.value = m ? m[1] + p.path : 'rtsp://admin:密码@相机IP:554' + p.path;
+      camUrl.focus();
+      netMsg('已填入「' + p.label + '」常见路径，请把 IP / 账号密码 换成你自己的', '');
+    });
+    box.appendChild(b);
+  });
+}
+
+function netMsg(text, cls) {
+  camUrlMsg.textContent = text || '';
+  camUrlMsg.className = 'cam-msg' + (cls ? ' ' + cls : '');
+}
+
+function renderNetList(items) {
+  if (!items.length) {
+    camNetList.innerHTML = '<div class="src-empty">局域网里没找到相机<br><br>' +
+      '常见原因：相机没连同一个 Wi-Fi、开了「禁止局域网发现」、或走的是云平台（需在 App 里打开 RTSP）</div>';
+    return;
+  }
+  camNetList.innerHTML = '';
+  items.forEach(it => {
+    const item = document.createElement('div');
+    item.className = 'src-item';
+    const url = it.rtsp || '';
+    item.innerHTML =
+      '<span class="cam-ico">🌐</span>' +
+      '<div class="cam-meta">' +
+        '<div class="cam-name">' + esc(it.brand || '相机') + ' · ' + esc(it.ip) + '</div>' +
+        '<div class="cam-sub">' + esc(it.note || '') + '</div>' +
+      '</div>';
+    item.addEventListener('click', () => {
+      // 只开了端口的主机没有完整 RTSP 地址，把它填进输入框让用户补全
+      if (!url || url.endsWith(':554/')) {
+        camUrl.value = url || ('rtsp://' + it.ip + ':554/');
+        netMsg('这个地址还不完整，请补上路径和账号，例如 rtsp://admin:密码@' + it.ip + ':554/stream1', 'err');
+        camUrl.focus();
+        return;
+      }
+      camModal.classList.add('hidden');
+      addNetCameraFrame(url, it.brand + ' ' + it.ip);
+    });
+    camNetList.appendChild(item);
+  });
+}
+
+let scanning = false;
+async function scanNetworkCams() {
+  if (scanning) return;
+  scanning = true;
+  const btn = $('#camScan');
+  btn.disabled = true;
+  camScanHint.textContent = '正在搜索…（约 3 秒）';
+  camNetList.innerHTML = '<div class="src-empty">正在用 ONVIF 组播 + RTSP 端口探测扫描局域网…</div>';
+  try {
+    const r = await fetch(CAM_API + '/discover', { cache: 'no-store' });
+    const j = await r.json();
+    if (!j.ok) throw new Error(j.error || '搜索失败');
+    renderNetList(j.items || []);
+    camScanHint.textContent = j.count
+      ? '找到 ' + j.count + ' 个设备 · 用时 ' + (j.elapsed / 1000).toFixed(1) + 's'
+      : '未发现设备 · 用时 ' + (j.elapsed / 1000).toFixed(1) + 's';
+  } catch (e) {
+    camNetList.innerHTML = '<div class="src-empty">搜索失败：' + esc(e.message) +
+      '<br><br>请确认后端服务已启动（端口 3000）</div>';
+    camScanHint.textContent = '';
+  } finally {
+    scanning = false;
+    btn.disabled = false;
+  }
+}
+
+async function testCamUrl() {
+  const url = camUrl.value.trim();
+  if (!url) { netMsg('先填一个 rtsp:// 地址', 'err'); return; }
+  netMsg('正在连接相机…', '');
+  const btn = $('#camTest');
+  btn.disabled = true;
+  try {
+    const r = await fetch(CAM_API + '/probe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url })
+    });
+    const j = await r.json();
+    if (j.ok) netMsg('连接成功 · ' + (j.label || '画面可用'), 'ok');
+    else netMsg('连接失败：' + (j.err || '未知原因'), 'err');
+  } catch (e) {
+    netMsg('请求失败：' + e.message, 'err');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function addCamUrl() {
+  const url = camUrl.value.trim();
+  if (!url) { netMsg('先填一个 rtsp:// 地址', 'err'); return; }
+  // 先探一次，避免把一个连不通的地址放进画布，用户只能看到一个黑框
+  netMsg('正在验证地址…', '');
+  const btn = $('#camAddUrl');
+  btn.disabled = true;
+  try {
+    const r = await fetch(CAM_API + '/probe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url })
+    });
+    const j = await r.json();
+    if (!j.ok) { netMsg('连接失败：' + (j.err || '未知原因'), 'err'); return; }
+    camModal.classList.add('hidden');
+    netMsg('');
+    addNetCameraFrame(url, j.label || url);
+  } catch (e) {
+    netMsg('请求失败：' + e.message, 'err');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function openCamModal() {
+  camModal.classList.remove('hidden');
+  netMsg('');
+  renderPresets();
+  loadLocalCams();
+}
+
 $('#addCamera').addEventListener('click', openCamModal);
-$('#camRefresh').addEventListener('click', openCamModal);
+$('#camRefresh').addEventListener('click', () => { loadLocalCams(); camNetList.innerHTML =
+  '<div class="src-empty">点「搜索局域网相机」自动查找，或在下方手动填地址</div>'; camScanHint.textContent = ''; });
+$('#camScan').addEventListener('click', scanNetworkCams);
+$('#camTest').addEventListener('click', testCamUrl);
+$('#camAddUrl').addEventListener('click', addCamUrl);
+$('#camUrl').addEventListener('keydown', e => { if (e.key === 'Enter') addCamUrl(); });
 $('#camClose').addEventListener('click', () => camModal.classList.add('hidden'));
 camModal.addEventListener('click', e => { if (e.target === camModal) camModal.classList.add('hidden'); });
 

@@ -11,6 +11,20 @@ function generateRoomId() {
 }
 
 const app = express();
+app.use(express.json({ limit: '1mb' }));
+
+// 开发环境前端跑在 5173，排版台要调 /api/camera/*，需要放开跨域；
+// 生产环境前后端同源，不需要也不应该放开。
+if (process.env.NODE_ENV !== 'production') {
+    app.use((req, res, next) => {
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+        if (req.method === 'OPTIONS') return res.sendStatus(204);
+        next();
+    });
+}
+
 const httpServer = createServer(app);
 // 生产环境前后端同源（由本服务托管 dist），不需要放开 CORS；
 // 开发环境前端在 5173，才需要允许跨域。
@@ -22,13 +36,44 @@ app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// ── 网络互联相机：局域网发现 + RTSP 转 MJPEG ──
+const camera = require('./camera');
+camera.mountCamera(app);
+
 const isProd = process.env.NODE_ENV === 'production';
-if (isProd) {
-    const distPath = path.join(__dirname, '..', 'frontend', 'dist');
-    app.use(express.static(distPath));
-    app.get('*', (req, res) => res.sendFile(path.join(distPath, 'index.html')));
+
+// 静态目录定位：开发仓库是 frontend/dist，桌面「精简版」运行包只有 frontend-dist，
+// 两种情况都要能找到，否则首页和排版台会 404。
+const fs = require('fs');
+function pickDir(cands) {
+    for (const c of cands) {
+        try { if (fs.statSync(c).isDirectory()) return c; } catch (e) { }
+    }
+    return null;
+}
+const ROOT = path.join(__dirname, '..');
+const distDir = pickDir([
+    path.join(ROOT, 'frontend', 'dist'),
+    path.join(ROOT, 'frontend-dist')
+]);
+const devDir = pickDir([path.join(ROOT, 'frontend')]);
+const publicDir = pickDir([path.join(ROOT, 'frontend', 'public')]);
+
+if (distDir) {
+    // public/ 里的排版台、手机页、琴键页都是纯静态文件（不进 vite 打包），
+    // 优先用源码目录，改完刷新即生效，不用每次重新 build。
+    if (publicDir) app.use(express.static(publicDir));
+    app.use(express.static(distDir));
+    // SPA 兜底：/student/<房间号> 这类前端路由要交给 index.html
+    app.get('*', (req, res) => res.sendFile(path.join(distDir, 'index.html')));
+    console.log('📁 静态目录:', distDir, publicDir ? '(+ public/ 优先)' : '');
+} else if (devDir) {
+    // 没有构建产物（纯源码环境）：只能直接托管源码，Vue 页面需改用 vite 5173 访问
+    if (publicDir) app.use(express.static(publicDir));
+    app.use(express.static(devDir));
+    console.log('📁 静态目录:', devDir, '（未找到 dist，Vue 页面请用 vite 5173）');
 } else {
-    app.use(express.static(path.join(__dirname, '..', 'frontend')));
+    console.warn('⚠️ 没找到前端静态目录，只提供 API');
 }
 
 // ── 房间 / 用户数据 ──
@@ -252,4 +297,12 @@ io.on('connection', socket => {
 const PORT = process.env.PORT || 3000;
 httpServer.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 易学音乐沙龙 Server listening on http://0.0.0.0:${PORT}`);
+});
+
+// 退出时把还在跑的 ffmpeg 转流进程一并收掉，避免残留吃 CPU
+['SIGINT', 'SIGTERM'].forEach(sig => {
+    process.on(sig, () => {
+        try { camera.killAll(); } catch (e) { }
+        process.exit(0);
+    });
 });
