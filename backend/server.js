@@ -236,7 +236,7 @@ io.on('connection', socket => {
             time: Date.now()
         };
         rooms[roomId].chatHistory.push(msg);
-        if (rooms[roomId].chatHistory.length > 200) rooms[roomId].chatHistory = rooms[roomId].slice(-200);
+        if (rooms[roomId].chatHistory.length > 200) rooms[roomId].chatHistory = rooms[roomId].chatHistory.slice(-200);
         io.to(roomId).emit('chat-message', msg);
     });
 

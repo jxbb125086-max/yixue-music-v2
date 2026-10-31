@@ -835,10 +835,10 @@ onBeforeUnmount(() => {
   background: #05070A; border-color: #222D3D;
   overflow: hidden; display: block;
 }
-/* cover：源画面正好 16:9 时与 contain 等效；源画面带黑边时把黑边裁掉，绝不出现双重黑边 */
+/* contain：完整显示不裁切（源常是浏览器标签页、比例不定，cover 会把贴边内容裁掉） */
 .video-stage video {
   display: block; width: 100%; height: 100%;
-  object-fit: cover; background: #05070A;
+  object-fit: contain; background: #05070A;
 }
 .video-hint {
   /* 不用 inset：老安卓 WebView（Chrome < 87）不认 */

@@ -838,10 +838,6 @@ function setupListeners() {
         const u = onlineUsers.value.find(x => x.id === id)
         if (u) u.micOn = m
     })
-
-    socket.on('kicked', ({ teacherName: tn }) => {
-        ElMessage.error(`您已被老师 ${tn || '老师'} 请出沙龙`)
-    })
 }
 
 function endClass() {
@@ -988,7 +984,6 @@ onBeforeUnmount(() => {
 /* ═══ ② 课前准备 ═══ */
 .prep { flex: 1; display: flex; align-items: stretch; padding: 2rem; overflow: hidden; gap: 1.5rem; }
 .prep-layout { display: flex; gap: 1.5rem; flex: 1; min-height: 0; }
-.prep-sidebar { flex: 0 0 380px; min-width: 320px; }
 .prep-card { width: 100%; max-width: none; padding: 2.2rem; height: 100%; }
 .prep-title { font-size: 1.45rem; font-weight: 600; margin: 0 0 .3rem; }
 .prep-sub { color: var(--text-2); font-size: .9rem; margin: 0 0 2rem; }
@@ -1005,11 +1000,6 @@ onBeforeUnmount(() => {
 .mode-card b { font-size: 1.02rem; }
 .mode-card span { font-size: .8rem; color: var(--text-2); line-height: 1.5; }
 .mode-card.active span { color: #D9C39A; }
-.start-btn { width: 100%; height: 3.4rem; font-size: 1.15rem; margin-top: .6rem; }
-.prep-tip {
-  text-align: center; color: var(--text-3); font-size: .82rem; line-height: 1.7;
-  margin: 1.2rem 0 0; padding: .8rem 1rem; background: rgba(255,255,255,.03); border-radius: var(--r-md);
-}
 
 /* ═══ 步骤页（选设备 / 选内容）═══ */
 .prep-layout--single { justify-content: center; }
