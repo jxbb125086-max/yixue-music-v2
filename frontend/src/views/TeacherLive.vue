@@ -27,8 +27,7 @@
     </header>
 
     <!-- ═══ ① 进入：姓名 ═══ -->
-    <main v-if="stage === 'entry'" class="entry">
-      <div class="entry-card card">
+    <main v-if="stage === 'entry'" class="entry">      <div class="entry-card card">
         <svg class="logo-lg" viewBox="0 0 28 28" width="72" height="72" aria-hidden="true">
           <rect x="1.5" y="1.5" width="25" height="25" rx="8" fill="#E0B15E"/>
           <rect x="6.5" y="7" width="3" height="14" rx="1" fill="#1A1408"/>
@@ -44,115 +43,107 @@
           <el-input v-model="teacherNameInput" placeholder="例如：李老师" maxlength="12" size="large"
             @keyup.enter="enterPrep" />
         </div>
-        <el-button class="btn-primary entry-btn" size="large" @click="enterPrep">开始上课</el-button>
+        <el-button class="btn-primary entry-btn" size="large" @click="enterPrep">进入沙龙 →</el-button>
         <div class="entry-steps">
           <div class="step"><i>1</i><span>输入姓名</span></div>
           <div class="step"><i>2</i><span>选设备</span></div>
-          <div class="step"><i>3</i><span>进入课堂</span></div>
+          <div class="step"><i>3</i><span>教学大厅</span></div>
         </div>
       </div>
     </main>
 
-    <!-- ═══ ② 课前准备 ═══ -->
-    <main v-else-if="stage === 'prep'" class="prep">
-      <div class="prep-card card">
-        <h2 class="prep-title">准备好，就开始了</h2>
-        <p class="prep-sub">花三十秒检查设备，上课后也能随时改</p>
+    <!-- ═══ ② 第2步：选设备 ═══ -->
+    <main v-if="stage === 'device'" class="prep">
+      <div class="prep-layout prep-layout--single">
+        <div class="prep-card card step-card">
+          <div class="step-head">
+            <span class="step-no">2</span>
+            <div>
+              <h2 class="prep-title">选择设备</h2>
+              <p class="prep-sub">花三十秒检查一下，上课后也能随时改</p>
+            </div>
+          </div>
 
-        <div class="field">
-          <div class="field-label">🎤 麦克风 <span class="field-tip">学生听您说话、弹琴</span></div>
-          <div class="field-row">
-            <el-select v-model="selectedMic" placeholder="选择麦克风" class="grow" @change="onMicChange">
-              <el-option v-for="d in audioDevices.mics" :key="d.deviceId"
-                :label="d.label || '麦克风 ' + (audioDevices.mics.indexOf(d)+1)" :value="d.deviceId" />
+          <div class="field">
+            <div class="field-label">🎤 麦克风 <span class="field-tip">学生听您说话、弹琴</span></div>
+            <div class="field-row">
+              <el-select v-model="selectedMic" placeholder="选择麦克风" class="grow" @change="onMicChange">
+                <el-option v-for="d in audioDevices.mics" :key="d.deviceId"
+                  :label="d.label || '麦克风 ' + (audioDevices.mics.indexOf(d)+1)" :value="d.deviceId" />
+              </el-select>
+              <div class="vol-bar"><div class="vol-fill" :style="{ width: micVolume + '%' }"></div></div>
+              <span class="vol-val">{{ micVolume }}%</span>
+              <el-button @click="testMic" :loading="testingMic">试听</el-button>
+            </div>
+          </div>
+
+          <div class="field">
+            <div class="field-label">🔊 扬声器 <span class="field-tip">您听学员说话</span></div>
+            <el-select v-model="selectedSpeaker" placeholder="选择扬声器" class="grow" @change="onSpeakerChange">
+              <el-option v-for="d in audioDevices.speakers" :key="d.deviceId"
+                :label="d.label || '扬声器 ' + (audioDevices.speakers.indexOf(d)+1)" :value="d.deviceId" />
             </el-select>
-            <div class="vol-bar"><div class="vol-fill" :style="{ width: micVolume + '%' }"></div></div>
-            <span class="vol-val">{{ micVolume }}%</span>
-            <el-button @click="testMic" :loading="testingMic">试听</el-button>
           </div>
-        </div>
 
-        <div class="field">
-          <div class="field-label">🔊 扬声器 <span class="field-tip">您听学员说话</span></div>
-          <el-select v-model="selectedSpeaker" placeholder="选择扬声器" class="grow" @change="onSpeakerChange">
-            <el-option v-for="d in audioDevices.speakers" :key="d.deviceId"
-              :label="d.label || '扬声器 ' + (audioDevices.speakers.indexOf(d)+1)" :value="d.deviceId" />
-          </el-select>
-        </div>
-
-        <div class="field">
-          <div class="field-label">🎹 声音模式</div>
-          <div class="mode-cards">
-            <div class="mode-card" :class="{ active: isMusicMode }" @click="setMusicMode(true)">
-              <b>钢琴音质</b>
-              <span>不加工、原样传输，弹琴音色最好</span>
-            </div>
-            <div class="mode-card" :class="{ active: !isMusicMode }" @click="setMusicMode(false)">
-              <b>说话音质</b>
-              <span>降噪更清晰，适合讲话多的时候</span>
+          <div class="field">
+            <div class="field-label">🎹 声音模式</div>
+            <div class="mode-cards">
+              <div class="mode-card" :class="{ active: isMusicMode }" @click="setMusicMode(true)">
+                <b>钢琴音质</b>
+                <span>不加工、原样传输，弹琴音色最好</span>
+              </div>
+              <div class="mode-card" :class="{ active: !isMusicMode }" @click="setMusicMode(false)">
+                <b>说话音质</b>
+                <span>降噪更清晰，适合讲话多的时候</span>
+              </div>
             </div>
           </div>
-        </div>
 
-        <!-- 移动端老师：没有屏幕共享，用摄像头作为视频源 -->
-        <div v-if="mobileTeacher" class="field">
-          <div class="field-label">📷 视频源 <span class="field-tip">移动端用摄像头代替屏幕共享</span></div>
-          <div class="mode-cards">
-            <div class="mode-card" :class="{ active: !camSourceOn }" @click="!camSourceOn && startCamSource()">
-              <b>开启摄像头源</b>
-              <span>用后置摄像头作为画面，学员可看到你</span>
-            </div>
-            <div class="mode-card" :class="{ active: camSourceOn }" @click="camSourceOn && stopCamSource()">
-              <b>关闭摄像头源</b>
-              <span>停止向学员传输画面</span>
-            </div>
-          </div>
-          <div v-if="camSourceOn" class="cam-source-preview">
-            <video ref="camSourcePreview" autoplay playsinline muted></video>
+          <div class="step-actions">
+            <el-button class="btn-ghost" size="large" @click="stage = 'entry'">← 返回</el-button>
+            <el-button class="btn-primary" size="large" @click="enterHall">进入教学大厅 →</el-button>
           </div>
         </div>
-
-        <el-button class="btn-primary start-btn" size="large" @click="startClass">进入课堂</el-button>
-        <p class="prep-tip">💡 桌面端：共享屏幕（教学排版台）；移动端：开启摄像头作为视频源</p>
       </div>
     </main>
 
-    <!-- ═══ ③ 上课中 ═══ -->
-    <main v-else class="live" ref="liveRef">
+    <!-- ═══ ③ 教学大厅 ═══ -->
+    <main v-show="stage === 'live'" class="live" ref="liveRef">
       <div class="live-main" ref="mainRef">
-        <!-- 舞台：教学排版采集进来是 16:9，这里就固定 16:9，画面刚好铺满不留黑边 -->
-        <div class="stage-area" ref="areaRef" :class="{ 'is-immersive': immersive }">
-          <div class="video-stage card" ref="stageRef" :class="{ immersive }">
-            <video ref="videoRef" autoplay muted playsinline></video>
-            <div class="live-badge"><span class="rec-dot"></span>直播中 · {{ formatTime(classSeconds) }}</div>
-            <button v-if="!immersive" class="fs-btn" :class="{ on: nativeFs }" @click="toggleFullscreen"
-              :title="nativeFs ? '退出全屏（Esc）' : '全屏观看'">
-              <svg v-if="!nativeFs" viewBox="0 0 24 24" width="16" height="16" fill="none"
-                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M9 4H4v5M15 4h5v5M15 20h5v-5M9 20H4v-5" />
-              </svg>
-              <svg v-else viewBox="0 0 24 24" width="16" height="16" fill="none"
-                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M4 9h5V4M20 9h-5V4M20 15h-5v5M4 15h5v5" />
-              </svg>
-              <span>{{ nativeFs ? '退出全屏' : '全屏' }}</span>
-            </button>
-            <button v-if="needTap" class="resume-btn" @click="resumeVideo">▶ 点击继续播放</button>
-            <div v-if="!streamReady" class="video-hint">正在获取屏幕共享画面…</div>
-          </div>
+        <!-- 排版工具条：从教学框里搬出来放在框上方。
+             好处：画面里永远不会出现工具栏、也不会留一条黑框，画布正好铺满 16:9 -->
+        <div class="stage-tools">
+          <button class="stool" @click="toolAction('window')" title="采集某个窗口/屏幕">窗口</button>
+          <button class="stool" @click="toolAction('camera')" title="接入摄像头">镜头</button>
+          <button class="stool" @click="toolAction('keys')" title="加一块 MIDI 琴键">键盘</button>
+          <button class="stool" @click="toolAction('text')" title="加一个文字框">文字</button>
+          <button class="stool" @click="toolAction('file')" title="加图片 / 视频 / 音频">文件</button>
+          <button class="stool" @click="toggleStageUiHidden()"
+            :title="stageUiHidden ? '框体标签已隐藏，点击显示' : '隐藏所有框体的标签 / 边框'">隐藏</button>
+          <span class="stool-gap"></span>
+          <button class="stool danger" @click="toolAction('clear')" title="清空所有内容">清空</button>
         </div>
 
-        <!-- 沉浸式全屏时的浮层（在旋转容器外面，永远正着）——只有退出按钮，画面之外不放任何东西 -->
-        <template v-if="immersive">
-          <button class="immersive-exit" @click="toggleFullscreen" title="退出全屏">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
-              stroke-linecap="round" stroke-linejoin="round">
-              <path d="M6 6l12 12M18 6L6 18" />
-            </svg>
-          </button>
-        </template>
+        <!-- 教学框：里面就是排版台本身，老师可以直接拖拽排版 -->
+        <div class="stage-area" ref="areaRef">
+          <div class="video-stage card" ref="stageRef">
+            <iframe
+              ref="stageIframeRef"
+              class="stage-iframe"
+              src="/composer/index.html"
+              allow="microphone; midi"
+              @load="onStageLoaded"
+            ></iframe>
+          </div>
+        </div>
 
         <div class="audio-strip card">
+          <!-- 直播开关：灰灯=未开播，红灯亮=直播中 -->
+          <button class="live-toggle" :class="{ on: pushing }" @click="togglePush"
+                  :title="pushing ? '点击停止直播，学员立刻看不到画面' : '点击开始直播，学员能看到画面'">
+            <span class="live-dot"></span>
+            <span class="live-label">直播</span>
+          </button>
           <div class="strip-group">
             <span class="strip-label">麦克风</span>
             <el-select v-model="selectedMic" class="strip-select" size="small" @change="onMicChange">
@@ -168,14 +159,11 @@
                 :label="d.label || '扬声器 ' + (audioDevices.speakers.indexOf(d)+1)" :value="d.deviceId" />
             </el-select>
           </div>
-          <div class="strip-group">
+          <div class="strip-group no-shrink">
             <span class="strip-label">声音</span>
             <el-button size="small" class="btn-ghost" @click="toggleAudioMode">
               {{ isMusicMode ? '🎵 钢琴音质' : '🗣️ 说话音质' }}
             </el-button>
-          </div>
-          <div v-if="mobileTeacher && camSourceOn" class="strip-group">
-            <el-button size="small" class="btn-ghost" @click="flipCamSource">🔄 翻转摄像头</el-button>
           </div>
           <el-button class="strip-rec" size="small" :class="isRecording ? 'btn-danger-ghost' : 'btn-ghost'"
             @click="isRecording ? stopRecording() : startRecording()">
@@ -257,47 +245,39 @@
 import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import { io } from 'socket.io-client'
 import SimplePeer from 'simple-peer'
+import { rtcConfig } from '../utils/rtc'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 // 生产模式（前后端同端口部署）用同源连接；vite 开发模式(5173)才需要指定后端地址
 const SERVER_URL = import.meta.env && import.meta.env.DEV ? 'http://localhost:3000' : undefined
 
-// ── 流程状态：entry(姓名) → prep(设备) → live(上课中) ──
+// ── 流程状态 ──
 const stage = ref('entry')
 const teacherNameInput = ref('')
 const teacherName = ref('')
 
-// 老师端是否使用摄像头作为视频源（移动端没有屏幕共享时用）
-const camSourceOn = ref(false)   // 摄像头源是否正在采集
-const camFacing = ref('environment') // 摄像头朝向：environment 后置 / user 前置
-const camSourcePreview = ref(null) // 本地预览 <video>
-let camSourceStream = null       // 摄像头源流
+// ── 直播状态 ──
+const pushing = ref(false)      // 是否正在把教学框直播给学员
+const stageIframeRef = ref(null)
+const stageUiHidden = ref(false) // 老师手动控制的「隐藏框体标签」开关状态
 
-const videoRef = ref(null)
 const stageRef = ref(null)
 const mainRef = ref(null)
 const areaRef = ref(null)
 const liveRef = ref(null)
-const nativeFs = ref(false)     // 浏览器全屏中
-const immersive = ref(false)    // CSS 沉浸式全屏中
 const chatScroll = ref(null)
 
 const currentRoomId = ref('')
 const classUrl = ref('')
 const isClassStarted = ref(false)
-const streamReady = ref(false)
+const preparing = ref(false)      // 「直播」开关 loading
 const onlineUsers = ref([])
 const speakingId = ref(null)
 const speakingStatus = ref(null)
 
-// ── 播放守卫状态（浏览器会把全屏切换中的视频暂停，需要主动续播）──
-const wantsPlay = ref(false)
-const needTap = ref(false)
-let playFails = 0
-
 const chatMessages = ref([])
 const chatInput = ref('')
-const emojis = ['😊', '💗', '😅', '😂', '🙋', '👏', '🤝']
+const emojis = ['😊', '💗', '😅', '😂', '🙋', '👏', '🤝', '🎁']
 const showEmojiPicker = ref(false)
 const emojiWrap = ref(null)
 function insertEmoji(e) {
@@ -305,9 +285,7 @@ function insertEmoji(e) {
     showEmojiPicker.value = false
 }
 
-// 计时 & 录制
-const classSeconds = ref(0)
-let classTimer = null
+// 录制
 const isRecording = ref(false)
 const recordSeconds = ref(0)
 let recordTimer = null
@@ -316,9 +294,9 @@ let recordTimer = null
 const audioDevices = reactive({ mics: [], speakers: [] })
 const selectedMic = ref('')
 const selectedSpeaker = ref('')
+const testingMic = ref(false)
 const micVolume = ref(0)
 const isMusicMode = ref(localStorage.getItem('mc_audio_mode') !== 'voice')
-const testingMic = ref(false)
 
 // 网络 & 媒体
 let socket = null
@@ -335,11 +313,6 @@ let teacherMicStream = null
 const students = computed(() => onlineUsers.value.filter(u => u.role === 'student'))
 
 // ── 工具 ──
-function formatTime(s) {
-    const m = Math.floor(s / 60).toString().padStart(2, '0')
-    const sec = (s % 60).toString().padStart(2, '0')
-    return `${m}:${sec}`
-}
 function formatRecordTime(s) {
     const h = Math.floor(s / 3600)
     const m = Math.floor((s % 3600) / 60).toString().padStart(2, '0')
@@ -360,11 +333,23 @@ function openLink() { window.open(classUrl.value, '_blank') }
 // 关键：必须按「舞台可用高度」反算，绝不能按「当前画面宽度」迭代，
 // 否则 width 变窄 → 可用高度变小 → 算出来更窄，会一路缩到底（自反馈死循环）。
 let liveRO = null
+
+/* 老款安卓 / 老 WebView 不支持 container-type + cqw/cqh、也不支持 aspect-ratio，
+   纯 CSS 算出来的教学框尺寸会塌成 0。这里用 JS 写死 px 兜底，新老浏览器结果一致。 */
+function fitStage() {
+    const area = areaRef.value, stage = stageRef.value
+    if (!area || !stage) return
+    const aw = area.clientWidth, ah = area.clientHeight
+    if (aw < 40 || ah < 40) return
+    const w = Math.min(aw, ah * 16 / 9)
+    stage.style.width = Math.round(w) + 'px'
+    stage.style.height = Math.round(w * 9 / 16) + 'px'
+}
+
 function layoutLive() {
     const live = liveRef.value, area = areaRef.value, main = mainRef.value
     if (!live || !area || !main || !live.isConnected) return
-    if (immersive.value || nativeFs.value) return       // 全屏时画面铺满视口，不用算
-    if (window.innerWidth < 900) { main.style.width = ''; fitStageFallback(); return }  // 单列布局，交给 CSS
+    if (window.innerWidth < 900) { main.style.width = ''; fitStage(); return }  // 单列布局
     const availH = area.clientHeight
     if (availH < 120) return
     const cs = getComputedStyle(live)
@@ -376,18 +361,7 @@ function layoutLive() {
     const byWidth = Math.round(totalW - railIdeal - gap)
     const w = Math.max(320, Math.min(byHeight, byWidth))
     main.style.width = w + 'px'
-    fitStageFallback()
-}
-// 老安卓（Chrome < 88）不认 aspect-ratio，舞台高度会塌：用 JS 按 16:9 补显式高度；
-// 支持的浏览器清掉残留、不插手。layoutLive 在全屏时已提前返回，这里不会碰全屏尺寸。
-function fitStageFallback() {
-    const st = stageRef.value
-    if (!st) return
-    let ok = false
-    try { ok = !!(window.CSS && CSS.supports && CSS.supports('aspect-ratio: 16 / 9')) } catch (e) { ok = false }
-    if (ok) { if (st.style.height) st.style.height = ''; return }
-    const w = st.clientWidth
-    if (w > 0) st.style.height = Math.round(w * 9 / 16) + 'px'
+    fitStage()
 }
 function watchLiveLayout() {
     const live = liveRef.value
@@ -398,115 +372,20 @@ function watchLiveLayout() {
     liveRO.observe(live)
     // 首帧音频条可能先换行再回单行，量两遍就稳了
     requestAnimationFrame(() => { layoutLive(); requestAnimationFrame(layoutLive) })
+    // 浏览器全屏/退出全屏时，ResizeObserver 不一定触发，额外监听全屏事件
+    function onFsChange() { layoutLive() }
+    document.addEventListener('fullscreenchange', onFsChange)
+    document.addEventListener('webkitfullscreenchange', onFsChange)
+    live._fsListeners = { onFsChange, docFs: onFsChange }
 }
 function unwatchLiveLayout() {
     if (liveRO) { liveRO.disconnect(); liveRO = null }
-}
-
-// ── 全屏观看 ──
-// 两条路：① 浏览器全屏（桌面 / Android）② CSS 沉浸式（iPhone / 应用内浏览器）
-// 注意：**绝不能用 video.webkitEnterFullscreen()**，那会把 <video> 交给系统播放器，
-// 退出后视频被暂停、还可能被搬离播放框，只能手动点播放才能恢复。
-// 另外浏览器进出全屏一定会暂停媒体，所以每次状态变化后都要主动续播。
-function fsElement() { return document.fullscreenElement || document.webkitFullscreenElement || null }
-
-function setImmersive(on) {
-    const next = !!on
-    if (immersive.value === next) return
-    immersive.value = next
-    document.documentElement.classList.toggle('stage-locked', next)
-    if (next) lockLandscape()
-    else { unlockOrientation(); resumeVideoSoon(); nextTick(layoutLive) }
-}
-
-async function toggleFullscreen() {
-    const el = stageRef.value
-    if (!el) return
-    if (fsElement()) {
-        try {
-            const exit = document.exitFullscreen || document.webkitExitFullscreen
-            if (exit) await exit.call(document)
-        } catch (e) { /* 忽略 */ }
-        return
+    const live = liveRef.value
+    if (live && live._fsListeners) {
+        document.removeEventListener('fullscreenchange', live._fsListeners.onFsChange)
+        document.removeEventListener('webkitfullscreenchange', live._fsListeners.docFs)
+        live._fsListeners = null
     }
-    if (immersive.value) { setImmersive(false); return }
-
-    if (el.requestFullscreen || el.webkitRequestFullscreen) {
-        // 依次尝试：带参（藏导航栏）→ 无参 → webkit 老式。
-        // 老安卓 / 旧 WebView 不认带参调用会直接拒绝，以前就直接掉进沉浸式了；
-        // 多试一轮无参的，很多设备其实能进真全屏。
-        const attempts = []
-        if (el.requestFullscreen) {
-            attempts.push(() => el.requestFullscreen({ navigationUI: 'hide' }))
-            attempts.push(() => el.requestFullscreen())
-        }
-        if (el.webkitRequestFullscreen) attempts.push(() => el.webkitRequestFullscreen())
-        for (const go of attempts) {
-            try {
-                await go()
-                lockLandscape()
-                resumeVideoSoon()
-                return
-            } catch (e) { /* 换下一种试法 */ }
-        }
-    }
-    setImmersive(true)
-}
-
-// 手机上顺手锁横屏：讲课画面是 16:9，横着看才够大（不支持的浏览器直接忽略）
-function lockLandscape() {
-    try {
-        const o = screen.orientation
-        if (o && typeof o.lock === 'function') o.lock('landscape').catch(() => { })
-    } catch (e) { /* 忽略 */ }
-}
-function unlockOrientation() {
-    try {
-        const o = screen.orientation
-        if (o && typeof o.unlock === 'function') o.unlock()
-    } catch (e) { /* 忽略 */ }
-}
-
-// ── 播放守卫 ──
-// 浏览器在进出全屏、切后台回来时会把 <video> 暂停；只要「应该正在播」就自动续播。
-function resumeVideo() {
-    const v = videoRef.value
-    if (!v || !wantsPlay.value) return
-    if (!v.srcObject && stream) v.srcObject = stream
-    if (!v.paused) return
-    const p = v.play()
-    if (p && p.catch) {
-        p.then(() => { playFails = 0; needTap.value = false })
-            .catch(() => { if (++playFails >= 3) needTap.value = true })
-    }
-}
-function resumeVideoSoon(times = 5) {
-    let n = 0
-    const tick = () => { resumeVideo(); if (++n < times) setTimeout(tick, 160) }
-    tick()
-}
-function onVideoPause() {
-    if (!wantsPlay.value || document.hidden) return
-    setTimeout(resumeVideo, 80)
-}
-function onVideoPlaying() { playFails = 0; needTap.value = false }
-function bindVideoGuards() {
-    const v = videoRef.value
-    if (!v || v.dataset.guard === '1') return
-    v.dataset.guard = '1'
-    v.addEventListener('pause', onVideoPause)
-    v.addEventListener('playing', onVideoPlaying)
-}
-function onVisibility() { if (!document.hidden) resumeVideoSoon() }
-function onFullscreenChange() {
-    nativeFs.value = !!fsElement()
-    if (!nativeFs.value) unlockOrientation()
-    resumeVideoSoon()   // ← 关键：进出全屏都立刻续播
-    nextTick(layoutLive)
-}
-function onKeydown(e) {
-    if (e.key !== 'Escape') return
-    if (immersive.value) setImmersive(false)
 }
 
 // ── 学员音频播放（学生连线的声音）──
@@ -533,7 +412,7 @@ function stopStudentAudio(id) {
     delete studentStreams[id]
 }
 
-// ── 音频设备 ──
+// ── 音频设备（与部署版统一的逻辑）──
 function micConstraints() {
     const base = selectedMic.value ? { deviceId: { exact: selectedMic.value } } : {}
     if (isMusicMode.value) {
@@ -582,9 +461,9 @@ async function startTeacherMicDetection() {
     } catch (e) { console.error('[老师麦克风] 获取失败:', e) }
 }
 
-/* 把一条新麦克风流接进当前状态：音量检测改用新流；上课中把每个学员连接的
+/* 把一条新麦克风流接进当前状态：音量检测改用新流；直播中把每个学员连接的
    音频发送轨直接换成新轨（replaceTrack，不用重协商），peerStream 同步更新——
-   这样课中切麦克风/切声音模式立刻生效（旧版只换检测流，学员听到的还是旧设备/旧轨道） */
+   这样课中切麦克风/切声音模式立刻生效（旧版把新轨加进没人发送的共享流里，等于没切） */
 function applyMicStreamToClass(s) {
     if (teacherMicStream && teacherMicStream !== s) teacherMicStream.getTracks().forEach(t => t.stop())
     teacherMicStream = s
@@ -593,7 +472,7 @@ function applyMicStreamToClass(s) {
     if (!newTrack || !peerStream) return
     const oldTrack = peerStream.getAudioTracks()[0]
     if (!oldTrack) {
-        // 开课时没拿到麦克风、peerStream 里还没有音频轨：给现有连接补一条
+        // 开播时没拿到麦克风、peerStream 里还没有音频轨：给现有连接补一条
         peerStream.addTrack(newTrack)
         Object.values(peers).forEach(p => { if (p && !p.destroyed) { try { p.addTrack(newTrack, peerStream) } catch (e) { } } })
         micStream = s
@@ -672,15 +551,13 @@ async function onMicChange() {
     } catch (e) { ElMessage.error('切换失败') }
 }
 function onSpeakerChange() {
-    // 老师真正听到的声音走 studentAudios（学员连线声）和本地预览 videoRef，两边都要切
+    // 老师端能听到的声音就是学员连线声（studentAudios），全部切到新扬声器；
+    // 之后新建的 Audio 在 playStudentAudio 里也会带上当前选择
     const sink = selectedSpeaker.value
-    let ok = false
-    if (videoRef.value && typeof videoRef.value.setSinkId === 'function') {
-        videoRef.value.setSinkId(sink).then(() => ElMessage.success('扬声器已切换')).catch(() => ElMessage.warning('切换失败'))
-        ok = true
-    }
-    Object.values(studentAudios).forEach(a => { if (a && typeof a.setSinkId === 'function') a.setSinkId(sink).catch(() => { }) })
-    if (!ok && !Object.keys(studentAudios).length) ElMessage.warning('当前浏览器不支持切换输出设备')
+    const audios = Object.values(studentAudios)
+    audios.forEach(a => { if (a && typeof a.setSinkId === 'function') a.setSinkId(sink).catch(() => { }) })
+    if (audios.length) ElMessage.success('扬声器已切换')
+    else ElMessage.info('扬声器已设置，学员连线后生效')
 }
 
 // ── 录制 ──
@@ -743,229 +620,42 @@ function kickStudent(studentId) {
         }).catch(() => { })
 }
 
-// ── 老师端摄像头源（移动端替代屏幕共享）──
-function isMobileEnv() {
-    return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '') ||
-        (navigator.maxTouchPoints > 1 && window.innerWidth < 900)
-}
-// 移动端没有屏幕共享，用摄像头作为视频源；桌面端保留屏幕共享
-const mobileTeacher = computed(() => isMobileEnv())
-async function startCamSource() {
-    if (!navigator.mediaDevices?.getUserMedia) { ElMessage.error('此设备无法使用摄像头'); return }
-    try {
-        camSourceStream = await navigator.mediaDevices.getUserMedia({
-            video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: camFacing.value }
-        })
-        camSourceOn.value = true
-        await nextTick()
-        if (camSourcePreview.value) { camSourcePreview.value.srcObject = camSourceStream; camSourcePreview.value.play().catch(() => { }) }
-        // 上课中切换视频源 → 重建 peerStream（保留原有音频轨）
-        if (stage.value === 'live' && peerStream) {
-            const audio = peerStream.getAudioTracks()
-            const rebuilt = new MediaStream([camSourceStream.getVideoTracks()[0], ...audio])
-            peerStream = rebuilt
-            Object.values(peers).forEach(p => {
-                if (!p || p.destroyed) return
-                try { p.removeStream(rebuilt) } catch (e) { }
-                try { p.addStream(rebuilt) } catch (e) { }
-            })
-        }
-        ElMessage.success('📷 摄像头源已开启，学员可看到你的画面')
-    } catch (e) {
-        console.error('开启摄像头源失败', e)
-        ElMessage.error('无法开启摄像头：' + (e.message || e))
-    }
-}
-function stopCamSource() {
-    if (camSourceStream) camSourceStream.getTracks().forEach(t => t.stop())
-    camSourceStream = null; camSourceOn.value = false
-    if (camSourcePreview.value) camSourcePreview.value.srcObject = null
-}
-
-// 手机老师翻转摄像头（前置 ↔ 后置）：换一条流并重建上行画面，音频轨不动
-async function flipCamSource() {
-    if (!camSourceOn.value) return
-    const next = camFacing.value === 'environment' ? 'user' : 'environment'
-    try {
-        const ns = await navigator.mediaDevices.getUserMedia({
-            video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: next }
-        })
-        camFacing.value = next
-        const old = camSourceStream
-        camSourceStream = ns
-        stream = ns
-        if (peerStream) {
-            const rebuilt = new MediaStream([ns.getVideoTracks()[0], ...peerStream.getAudioTracks()])
-            peerStream = rebuilt
-            Object.values(peers).forEach(p => {
-                if (!p || p.destroyed) return
-                try { p.removeStream(rebuilt) } catch (e) { }
-                try { p.addStream(rebuilt) } catch (e) { }
-            })
-        }
-        if (videoRef.value) { videoRef.value.srcObject = ns; wantsPlay.value = true; resumeVideoSoon() }
-        if (old) old.getTracks().forEach(t => t.stop())
-        ElMessage.success(next === 'user' ? '📷 已切换到前置摄像头' : '📷 已切换到后置摄像头')
-    } catch (e) {
-        console.error('翻转摄像头失败', e)
-        ElMessage.error('翻转摄像头失败')
-    }
-}
-
-// ── 排版台画布区域捕获（Region Capture，仅 Chrome）──
-// 排版台就部署在本服务里（/composer/，与课堂同源，是本地「钢琴教学排版台」的
-// 同一套页面）：点「开始上课」时打开它的标签页——整页大标签页，排版调整都在
-// 那边做。靠 window.open 的窗口引用 + postMessage 传递画布的 CropTarget
-// （不透明令牌）。开课共享时在系统框里选这个标签页并 cropTo 到画布，学员端
-// 只看到 16:9 画布本身：工具栏、状态栏、浏览器边框都不进画面，窗口大小随意。
-const PIANO_ORIGIN = location.origin
-const PIANO_URL = '/composer/index.html'
-let pianoWin = null
-let pianoTarget = null
-let pianoWaiter = null                // { resolve, timer }
-function pianoTargetArrived(target) {
-    pianoTarget = target
-    if (pianoWaiter) { clearTimeout(pianoWaiter.timer); const w = pianoWaiter; pianoWaiter = null; w.resolve(true) }
-}
-window.addEventListener('message', e => {
-    if (e.origin !== PIANO_ORIGIN || !e.data) return
-    if (e.data.type === 'yixue-crop-ready') {
-        if (pianoWin && !pianoWin.closed) pianoWin.postMessage({ type: 'yixue-gimme-crop' }, PIANO_ORIGIN)
-    } else if (e.data.type === 'yixue-crop-target') {
-        pianoTargetArrived(e.data.target)
-    } else if (e.data.type === 'yixue-crop-error') {
-        if (pianoWaiter) { clearTimeout(pianoWaiter.timer); const w = pianoWaiter; pianoWaiter = null; w.resolve(false) }
-    }
-})
-// 连接排版台拿画布令牌（进设备页时预连一次，点「进入课堂」时若还没拿到再连）：打开排版台标签页，
-// 随后弹出的系统共享框里选「钢琴教学排版台」标签页即可自动裁到画布。
-// 排版台没开成也不要紧：令牌等不到就按整页共享走，绝不挡上课。
-function beginPianoHandshake() {
-    if (!window.CropTarget) return Promise.resolve(false)
-    if (pianoTarget) return Promise.resolve(true)
-    pianoWin = window.open(PIANO_URL, 'yixuePianoCanvas')
-    if (!pianoWin) return Promise.resolve(false)
-    const got = new Promise(resolve => {
-        pianoWaiter = { resolve, timer: setTimeout(() => { pianoWaiter = null; resolve(false) }, 6000) }
-    })
-    // 排版台已经开着时不会再发 ready，主动请求一次；冷启动时靠 ready 再要
-    setTimeout(() => { if (pianoWin && !pianoWin.closed && !pianoTarget) pianoWin.postMessage({ type: 'yixue-gimme-crop' }, PIANO_ORIGIN) }, 800)
-    return got
-}
-
 // ── 流程 ──
 function enterPrep() {
     const name = teacherNameInput.value.trim()
     if (!name) { ElMessage.warning('请先输入您的姓名'); return }
     teacherName.value = name
-    stage.value = 'prep'
-    // 提前把排版台标签页打开、令牌拿到手：等点「进入课堂」弹系统框时就不用再开，
-    // 也避免开标签页和弹系统框挤在同一次点击里互相干扰
-    beginPianoHandshake()
+    stage.value = 'device'
 }
 
-async function startClass() {
-    // 移动端没有屏幕共享：用摄像头 + 麦克风作为视频/音频源
-    if (mobileTeacher.value) {
+// ── 教学框 iframe 加载完成 ──
+function onStageLoaded() {
+    console.log('[TeacherLive] 教学框已加载')
+    nextTick(layoutLive)
+    // 从排版台同步当前「隐藏」状态，让工具条的隐藏按钮颜色跟实际状态一致
+    const win = stageIframeRef.value && stageIframeRef.value.contentWindow
+    if (win) {
         try {
-            camSourceStream = await navigator.mediaDevices.getUserMedia({
-                video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: camFacing.value }
-            })
-            camSourceOn.value = true
-        } catch (e) {
-            ElMessage.error('无法开启摄像头，移动端需要摄像头才能开课')
-            return
-        }
-        try { micStream = await getMicStream() }
-        catch (e) { console.warn('麦克风获取失败', e); micStream = null }
-
-        peerStream = new MediaStream([
-            ...(camSourceStream ? camSourceStream.getVideoTracks() : []),
-            ...(micStream ? micStream.getAudioTracks() : [])
-        ])
-        stream = camSourceStream   // 复用 stream 变量：本地预览 + 后续操作都按 stream 处理
-        streamReady.value = true
-    } else {
-        try {
-            // 桌面端：屏幕共享 + 麦克风。排版台标签页在「开始上课」时已打开，
-            // 系统框里选它即可；共享流到手后等令牌并裁到画布（见 beginPianoHandshake）
-            const pianoP = beginPianoHandshake()
-            // 不抓系统声音：发给学员的只有麦克风轨，抓了系统声只会让本地预览把学员的
-            // 声音再放出来一遍、加重回声；peerStream 本来也不用这条轨
-            stream = await navigator.mediaDevices.getDisplayMedia({
-                video: { cursor: 'hidden', frameRate: 15 },
-                audio: false
-            })
-            // 排版台画布：等令牌最多 2.5 秒（超时按整页共享走）；裁失败自动回退整页画面
-            if (pianoP) await Promise.race([pianoP, new Promise(r => setTimeout(r, 2500))])
-            if (pianoTarget) {
-                const vt = stream.getVideoTracks()[0]
-                if (vt && typeof vt.cropTo === 'function') {
-                    // cropTo 在个别环境下可能既不成功也不报错地挂住，用超时兜底，绝不拖住开课
-                    const r = await Promise.race([
-                        vt.cropTo(pianoTarget).then(() => 'ok').catch(() => 'fail'),
-                        new Promise(res => setTimeout(() => res('timeout'), 1500))
-                    ])
-                    if (r === 'ok') ElMessage.success('🎹 已锁定排版台画布，只传画布画面')
-                    else if (r === 'fail') ElMessage.warning('区域捕获没成功（共享时要选「钢琴教学排版台」标签页），已改用整页画面')
-                }
-            }
-            streamReady.value = true
-            try { micStream = await getMicStream() }
-            catch (e) { console.warn('麦克风获取失败，学生可能听不到声音', e); micStream = null }
-
-            peerStream = new MediaStream([
-                ...stream.getVideoTracks(),
-                ...(micStream ? micStream.getAudioTracks() : [])
-            ])
-        } catch (e) {
-            console.error('屏幕共享失败', e)
-            let msg = '获取屏幕共享失败'
-            if (e && e.name === 'NotAllowedError') {
-                msg = '屏幕共享被拒绝。macOS 请在「系统设置 → 隐私与安全性 → 屏幕录制」中勾选当前浏览器，并重启浏览器'
-            } else if (e && e.name === 'NotFoundError') {
-                msg = '没有找到可共享的屏幕或窗口'
-            } else if (e && e.name === 'NotReadableError') {
-                msg = '无法读取屏幕画面，请检查屏幕录制权限'
-            } else if (e && e.message) {
-                msg = '获取屏幕共享失败：' + e.message
-            }
-            ElMessage.error(msg)
-            return
-        }
+            win.postMessage({ type: 'GET_HIDE_STATE' }, '*')
+        } catch (e) { /* 忽略 */ }
     }
+}
 
+/* ══════ 第4步：进入教学大厅 ══════
+   进大厅即建房，学员能提前加入并看到「老师正在准备」的等待状态。
+   老师觉得可以了再点「开始直播」。 */
+function enterHall() {
     stage.value = 'live'
     isClassStarted.value = true
-    classSeconds.value = 0
-    if (classTimer) clearInterval(classTimer)
-    classTimer = setInterval(() => classSeconds.value++, 1000)
-
     nextTick(() => {
-        if (videoRef.value) {
-            videoRef.value.srcObject = stream
-            wantsPlay.value = true
-            bindVideoGuards()
-            resumeVideoSoon()
-            if (selectedSpeaker.value && typeof videoRef.value.setSinkId === 'function')
-                videoRef.value.setSinkId(selectedSpeaker.value).catch(() => { })
-        }
         watchLiveLayout()
+        requestAnimationFrame(() => { layoutLive(); layoutLive() })
     })
+    connectSignaling()
+}
 
-    // 屏幕共享被手动停止时（桌面端）自动停录制 + 更新 UI；移动端摄像头源没有 ended 事件，忽略
-    if (stream && !mobileTeacher.value) {
-        stream.getVideoTracks().forEach(t => t.addEventListener('ended', () => {
-            if (isRecording.value) stopRecording()
-            streamReady.value = false
-            stage.value = 'prep'
-            isClassStarted.value = false
-            if (classTimer) { clearInterval(classTimer); classTimer = null }
-            ElMessage.warning('屏幕共享已停止')
-        }))
-    }
-
-    // ── 建立信令连接（带老师姓名）──
+function connectSignaling() {
+    if (socket) return
     socket = io(SERVER_URL, {
         reconnection: true, reconnectionAttempts: Infinity,
         reconnectionDelay: 1000, reconnectionDelayMax: 10000, timeout: 5000
@@ -975,23 +665,172 @@ async function startClass() {
     socket.emit('create-room', { teacherName: teacherName.value }, roomId => {
         currentRoomId.value = roomId
         classUrl.value = `${location.origin}/student/${roomId}`
-        ElMessage.success('课程已开始，把学生链接发给学员吧')
+        ElMessage.success('已进入教学大厅，把学生链接发给学员吧')
     })
 
     socket.on('disconnect', reason => {
         if (socketClosed || reason === 'io client disconnect') return
         ElMessage.warning('⚠️ 连接断开，正在自动重连...')
-        stopCamSource()
     })
     socket.on('reconnect', () => {
         if (socketClosed) return
         ElMessage.success('✅ 连接已恢复')
-        if (isClassStarted.value && peerStream) {
-            Object.values(peers).forEach(p => { try { p.destroy() } catch (e) { } })
-            peers = {}
-            socket.emit('rebuild-peers', { roomId: currentRoomId.value })
+        if (peerStream) rebuildAllPeers()
+    })
+}
+
+/* 教学框里是 DOM 排版台（#canvas 是个 div），拿不到 captureStream。
+   直播走「屏幕捕获 + CropTarget 裁剪到教学框」：
+   isWeb=true 时不裁切，直接共享当前标签页（网页模式）。 */
+async function acquireStageCapture(options = {}) {
+    if (!navigator.mediaDevices || typeof navigator.mediaDevices.getDisplayMedia !== 'function') {
+        console.warn('[TeacherLive] 浏览器不支持屏幕捕获')
+        return null
+    }
+    let cap = null
+    try {
+        const hint = options.isWeb
+            ? '请选择要共享的浏览器标签页，学员将看到该标签页内容'
+            : '请选择「此标签页」，学员将看到教学框里的画面'
+        ElMessage.info(hint)
+        cap = await navigator.mediaDevices.getDisplayMedia({
+            video: { frameRate: 30 },
+            audio: false,
+            preferCurrentTab: true,
+            selfBrowserSurface: 'include',
+            surfaceSwitching: 'exclude'
+        })
+    } catch (e) {
+        console.warn('[TeacherLive] 屏幕捕获被取消或失败', e)
+        return null
+    }
+    // 网页模式：直接返回整页画面，不裁切
+    if (options.isWeb) return cap
+    // 裁剪到教学框：画面里只留教学框，不含顶栏/右栏/操作条
+    const track = cap.getVideoTracks()[0]
+    const el = stageIframeRef.value
+    if (track && el && typeof window.CropTarget !== 'undefined' && typeof track.cropTo === 'function') {
+        try {
+            const cropTarget = await window.CropTarget.fromElement(el)
+            await track.cropTo(cropTarget)
+            console.log('[TeacherLive] 已裁剪到教学框区域')
+        } catch (e) {
+            console.warn('[TeacherLive] 裁剪失败，使用整页画面', e)
+        }
+    }
+    return cap
+}
+
+/* 工具条按钮 → 转发给教学框里的排版台执行（工具栏现在长在框外，只能靠消息驱动） */
+function toolAction(action) {
+    const win = stageIframeRef.value && stageIframeRef.value.contentWindow
+    if (!win) return
+    try { win.postMessage({ type: 'TOOLBAR_ACTION', action }, '*') } catch (e) { /* 忽略 */ }
+}
+
+/* 「隐藏」开关：老师手动控制，隐藏/显示所有框体的标签、边框和编辑工具条。 */
+function toggleStageUiHidden() {
+    stageUiHidden.value = !stageUiHidden.value
+    sendHideToComposer()
+}
+
+function sendHideToComposer() {
+    const win = stageIframeRef.value && stageIframeRef.value.contentWindow
+    if (!win) return
+    try { win.postMessage({ type: 'SET_HIDE', on: stageUiHidden.value, manual: true }, '*') } catch (e) { /* 忽略 */ }
+}
+
+/* 接收排版台回报的隐藏状态，保持工具条「隐藏」按钮 title 与框内状态一致。 */
+function onComposerMessage(e) {
+    if (!e.data || typeof e.data !== 'object') return
+    if (e.data.type === 'HIDE_STATE') stageUiHidden.value = !!e.data.on
+}
+
+/* ══════ 直播开关 ══════
+   不按「开始直播」学员看不到教学框内容（但能看到「老师正在准备」）；
+   按下才把教学框直播给学员，随时可以停。 */
+async function togglePush() {
+    if (pushing.value) { stopPush(); return }
+    await startPush()
+}
+
+async function startPush(options = {}) {
+    if (preparing.value) return
+    preparing.value = true
+    try {
+        const cap = await acquireStageCapture(options)
+        if (!cap) {
+            ElMessage.warning('没有拿到画面授权，学员暂时看不到画面')
+            return
+        }
+        // 麦克风（一次就好，之后复用）
+        if (!micStream) {
+            try { micStream = await getMicStream() }
+            catch (e) { console.warn('麦克风获取失败，学生可能听不到声音', e); micStream = null }
+        }
+        const vTracks = cap.getVideoTracks()
+        const aTracks = micStream ? micStream.getAudioTracks() : []
+        stream = cap
+        peerStream = new MediaStream([...vTracks, ...aTracks])
+        pushing.value = true
+
+        // 老师点了浏览器自带的「停止共享」→ 自动回到未直播
+        vTracks.forEach(t => t.addEventListener('ended', () => {
+            if (pushing.value) { stopPush(); ElMessage.warning('画面共享已停止') }
+        }))
+
+        rebuildAllPeers()
+        ElMessage.success('已开始直播，学员现在能看到画面了')
+    } catch (e) {
+        console.error('直播失败', e)
+        ElMessage.error('直播失败：' + (e?.message || e))
+    } finally {
+        preparing.value = false
+    }
+}
+
+function stopPush() {
+    if (stream) {
+        try { stream.getTracks().forEach(t => t.stop()) } catch (e) { /* 忽略 */ }
+    }
+    stream = null
+    peerStream = null
+    pushing.value = false
+    rebuildAllPeers()
+    ElMessage.info('已停止直播，学员看不到画面了')
+}
+
+/* 直播状态变了要让每个在线学员重新协商（画面来了/没了） */
+function rebuildAllPeers() {
+    Object.keys(peers).forEach(id => {
+        try { peers[id].destroy() } catch (e) { /* 忽略 */ }
+        delete peers[id]
+    })
+    if (!socket) return
+    students.value.forEach(u => connectToStudent(u.id))
+}
+
+/* 给某个学员建立连接。没有 peerStream（未直播）时不建，
+   学员端会停在「老师正在准备画面」，老师一开直播就立刻连上。 */
+function connectToStudent(id) {
+    if (!socket || !socket.connected) return
+    if (!peerStream) return
+    if (peers[id]) return
+    const peer = new SimplePeer({
+        initiator: true, trickle: false, stream: peerStream, objectMode: true,
+        sdpTransform: s => s, config: rtcConfig()
+    })
+    peer.on('signal', sig => socket.emit('signal', { to: id, from: socket.id, signal: sig }))
+    peer.on('stream', s => {
+        studentStreams[id] = s
+        if (s.getAudioTracks().length) {
+            const u = onlineUsers.value.find(x => x.id === id)
+            if (u?.micOn) playStudentAudio(id)
         }
     })
+    peer.on('error', err => console.error('Peer error', err))
+    peer.on('close', () => { stopStudentAudio(id); delete peers[id] })
+    peers[id] = peer
 }
 
 function setupListeners() {
@@ -1012,91 +851,51 @@ function setupListeners() {
         if (peers[from]) try { peers[from].signal(signal) } catch (e) { }
     })
 
-    // 学生加入 → 提示 + 发起连接（推流）
+    // 学生加入 → 提示；只有推流中才建立画面连接
     socket.on('user-joined', ({ id, name }) => {
         if (name) ElMessage.info(`${name} 加入了沙龙`)
-        if (!peerStream || peers[id]) return
-        const peer = new SimplePeer({
-            initiator: true, trickle: false, stream: peerStream, objectMode: true, sdpTransform: s => s
-        })
-        peer.on('signal', sig => socket.emit('signal', { to: id, from: socket.id, signal: sig }))
-        peer.on('stream', s => {
-            studentStreams[id] = s
-            // 上行音频
-            if (s.getAudioTracks().length) {
-                const u = onlineUsers.value.find(u => u.id === id)
-                if (u?.micOn) playStudentAudio(id)
-            }
-        })
-        peer.on('error', err => console.error('Peer error', err))
-        peer.on('close', () => { stopStudentAudio(id); delete peers[id] })
-        peers[id] = peer
+        connectToStudent(id)
     })
 
     // 学生重连后单独重建 peer
     socket.on('student-rejoined', ({ studentId }) => {
-        if (!peerStream) return
-        if (peers[studentId]) { try { peers[studentId].destroy() } catch (e) { } }
+        if (peers[studentId]) { try { peers[studentId].destroy() } catch (e) { /* 忽略 */ } }
+        delete peers[studentId]
         stopStudentAudio(studentId)
-        const peer = new SimplePeer({
-            initiator: true, trickle: false, stream: peerStream, objectMode: true, sdpTransform: s => s
-        })
-        peer.on('signal', sig => socket.emit('signal', { to: studentId, from: socket.id, signal: sig }))
-        peer.on('stream', s => {
-            studentStreams[studentId] = s
-            if (s.getAudioTracks().length) {
-                const u = onlineUsers.value.find(u => u.id === studentId)
-                if (u?.micOn) playStudentAudio(studentId)
-            }
-        })
-        peer.on('error', err => console.error('Peer error', err))
-        peer.on('close', () => { stopStudentAudio(studentId); delete peers[studentId] })
-        peers[studentId] = peer
+        connectToStudent(studentId)
     })
 
     // 老师重连 → 重建所有 peer
     socket.on('rebuild-peers', () => {
         if (!peerStream) return
         onlineUsers.value.forEach(u => {
-            if (u.role === 'student' && !peers[u.id]) {
-                const peer = new SimplePeer({
-                    initiator: true, trickle: false, stream: peerStream, objectMode: true, sdpTransform: s => s
-                })
-                peer.on('signal', sig => socket.emit('signal', { to: u.id, from: socket.id, signal: sig }))
-                peer.on('stream', s => {
-                    studentStreams[u.id] = s
-                    if (s.getAudioTracks().length) {
-                        if (u.micOn) playStudentAudio(u.id)
-                    }
-                })
-                peer.on('error', err => console.error('Peer error', err))
-                peer.on('close', () => { stopStudentAudio(u.id); delete peers[u.id] })
-                peers[u.id] = peer
-            }
+            if (u.role === 'student' && !peers[u.id]) connectToStudent(u.id)
         })
     })
 
+    // 学员麦克风状态
+    socket.on('user-mic-update', ({ id, micOn: m }) => {
+        const u = onlineUsers.value.find(x => x.id === id)
+        if (u) u.micOn = m
+    })
 }
 
 function endClass() {
     ElMessageBox.confirm('确定结束课程？所有学员将被断开。', '结束课程', { type: 'warning' })
         .then(() => {
             if (isRecording.value) stopRecording()
-            if (classTimer) { clearInterval(classTimer); classTimer = null }
             if (currentRoomId.value && socket) socket.emit('end-class', currentRoomId.value)
             Object.values(peers).forEach(p => { try { p.destroy() } catch (e) { } })
             Object.keys(studentAudios).forEach(stopStudentAudio)
             peers = {}
             if (stream) stream.getTracks().forEach(t => t.stop())
             if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null }
-            stopCamSource()   // 关摄像头源
             peerStream = null
+            pushing.value = false
             stopVolumeDetection()
             if (socket) { socketClosed = true; socket.disconnect(); socket = null }
-            if (videoRef.value) videoRef.value.srcObject = null
             isClassStarted.value = false
-            streamReady.value = false
-            speakingId.value = null
+                    speakingId.value = null
             speakingStatus.value = null
             onlineUsers.value = []
             chatMessages.value = []
@@ -1111,24 +910,38 @@ function onDocClick(e) {
         showEmojiPicker.value = false
     }
 }
+/* 老款安卓 / 老 WebView：flex gap（Chrome < 84）无效 → 打 .no-flex-gap 用 margin 兜底 */
+function detectLegacyWebView() {
+    const html = document.documentElement
+    try {
+        // 两个 0 高度的子项：支持 flex gap 时容器高 10px，不支持时 0px
+        const box = document.createElement('div')
+        box.style.cssText = 'position:absolute;left:-9999px;top:0;display:flex;flex-direction:column;gap:10px'
+        box.appendChild(document.createElement('div'))
+        box.appendChild(document.createElement('div'))
+        document.body.appendChild(box)
+        const supported = box.getBoundingClientRect().height >= 9
+        document.body.removeChild(box)
+        if (!supported) html.classList.add('no-flex-gap')
+    } catch (e) { html.classList.add('no-flex-gap') }
+}
+
 onMounted(async () => {
+    detectLegacyWebView()
     document.addEventListener('click', onDocClick)
-    document.addEventListener('fullscreenchange', onFullscreenChange)
-    document.addEventListener('webkitfullscreenchange', onFullscreenChange)
-    document.addEventListener('visibilitychange', onVisibility)
-    document.addEventListener('keydown', onKeydown)
+    window.addEventListener('message', onComposerMessage)
     await getAudioDevices()
-    navigator.mediaDevices.addEventListener('devicechange', getAudioDevices)
+    try {
+        if (navigator.mediaDevices && navigator.mediaDevices.addEventListener)
+            navigator.mediaDevices.addEventListener('devicechange', getAudioDevices)
+    } catch (e) { /* 老浏览器没有 devicechange，忽略 */ }
 })
 onBeforeUnmount(() => {
     document.removeEventListener('click', onDocClick)
-    document.removeEventListener('fullscreenchange', onFullscreenChange)
-    document.removeEventListener('webkitfullscreenchange', onFullscreenChange)
-    document.removeEventListener('visibilitychange', onVisibility)
-    document.removeEventListener('keydown', onKeydown)
-    if (fsElement()) { try { (document.exitFullscreen || document.webkitExitFullscreen).call(document) } catch (e) { } }
-    setImmersive(false)
-    unlockOrientation()
+    window.removeEventListener('message', onComposerMessage)
+    if (navigator.mediaDevices) {
+      try { navigator.mediaDevices.removeEventListener('devicechange', getAudioDevices) } catch (_) {}
+    }
     unwatchLiveLayout()
     if (isRecording.value) stopRecording()
     socketClosed = true
@@ -1138,14 +951,13 @@ onBeforeUnmount(() => {
     Object.keys(studentAudios).forEach(stopStudentAudio)
     if (stream) stream.getTracks().forEach(t => t.stop())
     if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null }
-    stopCamSource()
     peerStream = null
     if (socket) socket.disconnect()
 })
 </script>
 
 <style scoped>
-.salon { width: 100%; min-height: 100%; min-height: 100vh; min-height: calc(var(--vh, 1vh) * 100); min-height: 100dvh; display: flex; flex-direction: column; }
+.salon { width: 100%; min-height: 100%; min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; }
 
 /* ═══ 顶栏 ═══ */
 .topbar {
@@ -1210,8 +1022,9 @@ onBeforeUnmount(() => {
 }
 
 /* ═══ ② 课前准备 ═══ */
-.prep { flex: 1; display: flex; align-items: flex-start; justify-content: center; padding: 2.4rem 1.2rem; overflow-y: auto; }
-.prep-card { width: 100%; max-width: 36rem; padding: 2.2rem; }
+.prep { flex: 1; display: flex; align-items: stretch; padding: 2rem; overflow: hidden; gap: 1.5rem; }
+.prep-layout { display: flex; gap: 1.5rem; flex: 1; min-height: 0; }
+.prep-card { width: 100%; max-width: none; padding: 2.2rem; height: 100%; }
 .prep-title { font-size: 1.45rem; font-weight: 600; margin: 0 0 .3rem; }
 .prep-sub { color: var(--text-2); font-size: .9rem; margin: 0 0 2rem; }
 .field { margin-bottom: 1.6rem; }
@@ -1227,11 +1040,23 @@ onBeforeUnmount(() => {
 .mode-card b { font-size: 1.02rem; }
 .mode-card span { font-size: .8rem; color: var(--text-2); line-height: 1.5; }
 .mode-card.active span { color: #D9C39A; }
-.start-btn { width: 100%; height: 3.4rem; font-size: 1.15rem; margin-top: .6rem; }
-.prep-tip {
-  text-align: center; color: var(--text-3); font-size: .82rem; line-height: 1.7;
-  margin: 1.2rem 0 0; padding: .8rem 1rem; background: rgba(255,255,255,.03); border-radius: var(--r-md);
+
+/* ═══ 步骤页（选设备 / 选内容）═══ */
+.prep-layout--single { justify-content: center; }
+.step-card {
+  width: 100%; max-width: 720px; height: auto; align-self: center;
+  padding: 2.4rem 2.6rem; max-height: 100%; overflow-y: auto;
 }
+.step-head { display: flex; align-items: flex-start; gap: 1rem; margin-bottom: 2rem; }
+.step-no {
+  flex: none; width: 2.3rem; height: 2.3rem; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--gold-soft); color: var(--gold); border: 1px solid var(--gold-line);
+  font-weight: 700; font-size: 1.05rem; margin-top: .1rem;
+}
+.step-head .prep-sub { margin-bottom: 0; }
+.step-actions { display: flex; gap: .9rem; justify-content: flex-end; margin-top: 2rem; }
+.step-actions .el-button { min-width: 8rem; height: 2.9rem; font-size: 1rem; }
 
 /* ═══ ③ 上课中 ═══
    主列宽度由 JS 锁成「画面宽度」，右栏 flex 吃掉所有剩余宽度 —— 任何窗口尺寸都不会
@@ -1239,14 +1064,48 @@ onBeforeUnmount(() => {
 .live {
   flex: 1; display: flex; gap: 1rem; padding: 1rem 1.4rem 1.4rem;
   min-height: 0;
+  position: relative; z-index: 1; background: var(--bg);
 }
 .live-main {
-  flex: 0 0 auto; width: 100%;
-  display: flex; flex-direction: column; gap: 1rem;
-  min-width: 0; min-height: 0;
+  /* 宽度由 layoutLive() 用 JS 锁成「画面宽度」：必须 flex:0 0 auto，
+     否则 flex-shrink 会把它压回内容宽度，画面被挤成窄条 */
+  flex: 0 0 auto; min-width: 0; display: flex; flex-direction: column; gap: 1rem; padding: 0;
+  min-height: 0;
 }
-/* min-width 保证极窄屏时右栏不会被画面挤没 */
-.live-rail { flex: 1 1 auto; min-width: 22rem; display: flex; flex-direction: column; gap: 1rem; min-height: 0; }
+/* 右栏吃掉所有剩余宽度（画面 16:9 被高度卡住时，剩余空间全给右栏，中间不留缝） */
+.live-rail { flex: 1 1 0; min-width: 22rem; display: flex; flex-direction: column; gap: 1rem; min-height: 0; }
+
+/* 老款安卓降级：flex gap 在 Chrome < 84 无效，卡片会全贴在一起 → 用 margin 顶替 */
+.no-flex-gap .live-rail > * + * { margin-top: 1rem; }
+.no-flex-gap .live-main > * + * { margin-top: 1rem; }
+.no-flex-gap .audio-strip > * + * { margin-left: 1rem; }
+.no-flex-gap .chat-input-row .el-button { margin-left: .5rem; }
+.no-flex-gap .student-actions > * + * { margin-left: .4rem; }
+.no-flex-gap .audio-strip > * + * { margin-left: .6rem; }
+
+/* ═══ 排版工具条（在教学框外面）═══
+   以前它在 iframe 内部，隐藏时只把 opacity 归零、56px 高度还在，
+   画面顶上就留一条黑框；现在搬出来，框里只剩内容，画布正好 16:9。 */
+.stage-tools {
+  display: flex; align-items: center; gap: .38rem; flex-shrink: 0;
+  padding: .32rem .45rem;
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  overflow-x: auto; overflow-y: hidden; scrollbar-width: none;
+}
+.stage-tools::-webkit-scrollbar { height: 0; }
+.stool {
+  padding: .32rem .72rem; border-radius: 6px;
+  border: 1px solid var(--line-2); background: var(--panel-2);
+  color: var(--text-2); font-size: .78rem; font-family: inherit;
+  cursor: pointer; white-space: nowrap; flex-shrink: 0;
+  transition: color .15s, border-color .15s, background .15s;
+  -webkit-tap-highlight-color: transparent;
+}
+.stool:hover { color: var(--gold); border-color: var(--gold-line); background: var(--panel-3); }
+.stool.danger { color: #FF7A7F; border-color: rgba(255,90,95,.32); }
+.stool.danger:hover { background: rgba(255,90,95,.14); border-color: rgba(255,90,95,.55); }
+.stool-gap { flex: 1; min-width: .4rem; }
 
 /* ═══ 画面舞台：固定 16:9 ═══
    采集端（教学排版台）输出的是 16:9，这里按同样的比例开框，画面刚好铺满。
@@ -1258,7 +1117,6 @@ onBeforeUnmount(() => {
 }
 /* 沉浸式时一定要关掉 container-type：它会带上 contain:layout，
    那样 position:fixed 就只相对这个盒子定位，铺不满整个视口。 */
-.stage-area.is-immersive { container-type: normal; }
 .video-stage {
   position: relative;
   width: min(100cqw, calc(100cqh * 16 / 9));
@@ -1267,132 +1125,70 @@ onBeforeUnmount(() => {
   background: #05070A; border-color: #222D3D;
   overflow: hidden; display: block;
 }
-/* contain：保证源画面完整显示。源是浏览器标签页/窗口时，比例由窗口大小决定、
-   往往不是 16:9，用 cover 会把贴边的内容（琴键、工具栏）裁掉；contain 只留黑边，
-   黑边与舞台黑底一体，不影响观看。源正好 16:9 时两者等效。 */
-.video-stage video {
-  display: block; width: 100%; height: 100%;
-  object-fit: contain; background: #05070A;
+/* 教学框里就是排版台本身，老师可直接在里面拖拽 */
+.stage-iframe {
+  position: absolute; top: 0; right: 0; bottom: 0; left: 0; width: 100%; height: 100%;
+  border: none; background: #0f1216; display: block;
 }
-.video-hint {
-  position: absolute; top: 0; right: 0; bottom: 0; left: 0; inset: 0; display: flex; align-items: center; justify-content: center;
-  color: var(--text-3); font-size: .95rem; pointer-events: none;
+
+/* ── 直播开关（灰灯 = 未开播，红灯亮 = 直播中）── */
+.live-toggle {
+  display: inline-flex; align-items: center; gap: .42rem;
+  padding: .36rem .8rem .36rem .62rem; border-radius: 999px;
+  border: 1px solid var(--line-2); background: var(--panel-3);
+  color: var(--text-3); font-size: .78rem; font-family: inherit; font-weight: 600;
+  cursor: pointer; flex-shrink: 0; transition: all .18s;
+  -webkit-tap-highlight-color: transparent;
 }
-.live-badge {
-  position: absolute; top: .8rem; left: .8rem; display: flex; align-items: center; gap: .45rem;
-  background: rgba(10,14,20,.78); border: 1px solid var(--line-2); color: #FF7A7F;
-  font-size: .78rem; padding: .28rem .8rem; border-radius: 999px; backdrop-filter: blur(8px);
-  font-variant-numeric: tabular-nums; pointer-events: none;
+.live-toggle:hover { border-color: var(--gold-line); color: var(--text-2); }
+.live-label { letter-spacing: .02em; }
+/* 灰灯：熄灭状态 */
+.live-dot {
+  width: .54rem; height: .54rem; border-radius: 50%;
+  background: #4C5766;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.07);
+  transition: background .18s, box-shadow .18s;
 }
-.rec-dot { width: .5rem; height: .5rem; border-radius: 50%; background: #FF5A5F; animation: recblink 1.2s infinite; }
+/* 红灯：亮起 + 呼吸光晕 */
+.live-toggle.on {
+  color: #FF7A7F; border-color: rgba(255,90,95,.5); background: rgba(46,12,14,.72);
+}
+.live-toggle.on .live-dot {
+  background: #FF5A5F;
+  box-shadow: 0 0 0 2px rgba(255,90,95,.2), 0 0 10px 2px rgba(255,90,95,.6);
+  animation: recblink 1.5s ease-in-out infinite;
+}
+
 @keyframes recblink { 0%, 100% { opacity: 1 } 50% { opacity: .25 } }
 
-/* 全屏按钮：画面右下角，图标 + 文字，手机上也点得到 */
-.fs-btn {
-  position: absolute; right: .7rem; bottom: .7rem; z-index: 5;
-  display: inline-flex; align-items: center; gap: .35rem;
-  padding: .42rem .8rem .42rem .65rem;
-  border-radius: 999px; border: 1px solid var(--line-2);
-  background: rgba(10,14,20,.72); color: var(--text-2);
-  font-size: .78rem; font-family: inherit; cursor: pointer;
-  backdrop-filter: blur(8px); transition: all .15s;
-}
-.fs-btn:hover { color: var(--gold); border-color: var(--gold-line); background: rgba(10,14,20,.92); }
-.fs-btn.on { color: var(--gold); border-color: var(--gold-line); }
 
-/* 全屏：两种模式共用「铺满视口」的样式
-   ① 浏览器全屏 → :fullscreen  ② CSS 沉浸式 → .immersive（iPhone / 应用内浏览器） */
-.video-stage:fullscreen,
-.video-stage:-webkit-full-screen,
-.video-stage.immersive {
-  position: fixed;
-  left: 50%; top: 50%;
-  width: 100vw; height: 100vh;
-  width: calc(var(--vw, 1vw) * 100); height: calc(var(--vh, 1vh) * 100);
-  max-width: none; max-height: none;
-  aspect-ratio: auto;
-  margin: 0; border: 0; border-radius: 0;
-  background: #000;
-  z-index: 9998;
-  transform: translate(-50%, -50%);
-}
-/* 全屏时画面用 contain —— 宁可两侧留黑边，也不裁掉讲课内容 */
-.video-stage:fullscreen video,
-.video-stage:-webkit-full-screen video,
-.video-stage.immersive video { object-fit: contain; }
-.video-stage::backdrop { background: #000; }
-
-/* 全屏就是「干净看画面」：徽标、提示一律收起，只留视频本身和退出按钮 */
-.video-stage:fullscreen .live-badge,
-.video-stage:-webkit-full-screen .live-badge,
-.video-stage.immersive .live-badge,
-.video-stage:fullscreen .video-hint,
-.video-stage:-webkit-full-screen .video-hint,
-.video-stage.immersive .video-hint { display: none; }
-
-/* 竖着拿手机又没进真全屏（拿不到方向锁定）：把画面转 90°，
-   用户把手机横过来就是满屏，不用等系统转屏。只对触屏生效，桌面不动。 */
-@media (orientation: portrait) {
-  html.is-touch .video-stage.immersive {
-    width: 100vh; height: 100vw;
-    width: calc(var(--vh, 1vh) * 100); height: calc(var(--vw, 1vw) * 100);
-    width: 100dvh; height: 100dvw;
-    transform: translate(-50%, -50%) rotate(90deg);
-  }
-  /* 原生全屏同理：方向锁定没生效的老安卓，竖屏进全屏也转 90°，横过来即满屏 */
-  html.is-touch .video-stage:fullscreen,
-  html.is-touch .video-stage:-webkit-full-screen {
-    width: 100vh; height: 100vw;
-    width: calc(var(--vh, 1vh) * 100); height: calc(var(--vw, 1vw) * 100);
-    width: 100dvh; height: 100dvw;
-    transform: translate(-50%, -50%) rotate(90deg);
-  }
-}
-
-/* 沉浸式下的浮层：右下角圆形小按钮，不挡画面主体 */
-.immersive-exit {
-  position: fixed; z-index: 10000;
-  bottom: calc(env(safe-area-inset-bottom, 0px) + .9rem);
-  right: calc(env(safe-area-inset-right, 0px) + .9rem);
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 2.9rem; height: 2.9rem;
-  border-radius: 50%; border: 1.5px solid var(--gold-line);
-  background: rgba(10,14,20,.82); color: var(--gold);
-  font-family: inherit; cursor: pointer;
-  backdrop-filter: blur(8px);
-  box-shadow: 0 3px 12px rgba(0,0,0,.5);
-  opacity: .95; transition: filter .15s, transform .1s;
-}
-.immersive-exit svg { width: 1.15rem; height: 1.15rem; }
-.immersive-exit:hover,
-.immersive-exit:active { filter: brightness(1.2); transform: scale(.96); }
-
-/* 浏览器把播放拦下来时的兜底：给一个明确可点的按钮 */
-.resume-btn {
-  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
-  z-index: 6; padding: .7rem 1.3rem; border-radius: 999px;
-  border: 1px solid var(--gold-line); background: rgba(10,14,20,.86);
-  color: var(--gold); font-size: .95rem; font-weight: 600;
-  font-family: inherit; cursor: pointer; backdrop-filter: blur(8px);
-}
-.resume-btn:hover { background: rgba(224,177,94,.18); }
-
+/* 控制条永远单行：一旦换行，音频条会从 57px 涨到 91px，
+   把教学框整体挤矮 100 多 px（看起来像"页面缩小了"）、录制按钮被挤到第二行。
+   做法：nowrap + 各控件可压缩，实在放不下才横向滚动。 */
 .audio-strip {
-  display: flex; align-items: center; flex-wrap: wrap; gap: .6rem 1.1rem;
+  display: flex; align-items: center; flex-wrap: nowrap; gap: .6rem 1rem;
   padding: .7rem 1.1rem; flex-shrink: 0;
-  width: 100%;   /* 主列宽度已等于画面宽度，这里自然同宽 */
+  width: auto;
+  overflow-x: auto; overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
 }
-.strip-group { display: flex; align-items: center; gap: .55rem; min-width: 0; }
-.strip-label { font-size: .82rem; color: var(--text-2); white-space: nowrap; }
-.strip-select { width: 9.5rem; }
-.vol-bar.sm { width: 5rem; flex: none; }
-.strip-rec { margin-left: auto; }
+.audio-strip::-webkit-scrollbar { height: 0; }
+.strip-group { display: flex; align-items: center; gap: .5rem; min-width: 0; flex: 0 1 auto; }
+/* 含按钮的组不参与收缩（否则「钢琴音质」会被压成只剩图标） */
+.strip-group.no-shrink { flex-shrink: 0; }
+.strip-group .el-button { flex-shrink: 0; white-space: nowrap; }
+.strip-label { font-size: .82rem; color: var(--text-2); white-space: nowrap; flex-shrink: 0; }
+/* 下拉框可被压缩（9.5rem → 最低 5rem），窗口变窄时先挤它，而不是换行 */
+.strip-select { width: 9.5rem; min-width: 5rem; flex: 0 1 9.5rem; }
+.vol-bar.sm { width: 5rem; flex: 0 1 5rem; min-width: 2rem; }
+.strip-rec { margin-left: auto; flex-shrink: 0; }
 
 /* ═══ 右栏卡片 ═══ */
 .rail-card { padding: 1.1rem 1.25rem; display: flex; flex-direction: column; min-height: 0; flex-shrink: 1; }
 .rail-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: .85rem; flex-shrink: 0; }
 .rail-title { font-size: 1.05rem; font-weight: 600; }
-.rail-empty { color: var(--text-3); font-size: .85rem; text-align: center; padding: 1.2rem .5rem; line-height: 1.8; }
+.rail-empty { color: var(--text-3); font-size: .85rem; text-align: center; padding: 1.2rem .5rem; line-height: 1.8; flex-shrink: 0; }
 .student-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: .2rem; }
 .rail-hint {
   margin: .9rem 0 0; padding-top: .8rem; border-top: 1px dashed var(--line);
@@ -1421,10 +1217,6 @@ onBeforeUnmount(() => {
 /* ═══ 公屏 ═══ */
 .chat-card { flex: 1; min-height: 15rem; }
 
-/* 摄像头源本地预览（老师移动端） */
-.cam-source-preview { margin-top: .8rem; border-radius: var(--r-md); overflow: hidden; border: 1px solid rgba(168,120,255,.4); }
-.cam-source-preview video { display: block; width: 100%; aspect-ratio: 16/9; object-fit: cover; background: #05070A; }
-
 .chat-scroll { flex: 1; overflow-y: auto; min-height: 0; padding: .2rem; -webkit-overflow-scrolling: touch; }
 .chat-empty { color: var(--text-3); font-size: .85rem; text-align: center; padding: 2rem .5rem; }
 .chat-input-row { display: flex; gap: .5rem; margin-top: .8rem; flex-shrink: 0; align-items: center; }
@@ -1434,40 +1226,46 @@ onBeforeUnmount(() => {
 .emoji-panel {
   position: absolute; bottom: calc(100% + .55rem); left: 0;
   background: var(--panel-2); border: 1px solid var(--line-2); border-radius: var(--r-md);
-  padding: .5rem; display: grid; grid-template-columns: repeat(7, 1fr); gap: .3rem;
+  padding: .5rem; display: grid; grid-template-columns: repeat(8, 1fr); gap: .3rem;
   box-shadow: 0 10px 34px rgba(0,0,0,.55); z-index: 40;
 }
 
 /* ═══ 桌面端：页面锁定视口高度，只有内部区域滚动 ═══ */
 @media (min-width: 900px) {
-  .salon { height: 100vh; height: calc(var(--vh, 1vh) * 100); height: 100dvh; overflow: hidden; }
+  .salon { height: 100dvh; overflow: hidden; }
   .entry { overflow-y: auto; }
   /* 学员卡按人数长高，最多占右栏 55%，再多才在卡内滚动（原来 42% 放 3 个人就切半行） */
   .rail-card:not(.chat-card) { max-height: 55%; }
 }
 
 /* ═══ 响应式 ═══ */
+@media (max-width: 1024px) and (min-width: 641px) {
+  /* 窄窗口里「扬声器」组先让位（改扬声器在选设备那步也能改），
+     否则它的文字会被压成单个「扬」字 */
+  .audio-strip .strip-group.hide-m { display: none; }
+}
+
 @media (max-width: 899px) {
-  .salon { height: 100%; height: 100vh; height: calc(var(--vh, 1vh) * 100); height: 100dvh; overflow: hidden; }
+  .salon { height: 100%; height: 100vh; height: 100dvh; overflow: hidden; }
   .live {
     flex: 1; min-height: 0; flex-direction: column;
     overflow-y: auto; -webkit-overflow-scrolling: touch;
   }
-  .live-main { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  /* 手机上不再让内部 flex 抢高度（会把学员卡压成一条缝）：
+     主列和右栏都按内容自然高，整个 .live 作为唯一滚动容器 */
+  .live-main { flex: none; display: flex; flex-direction: column; }
   .stage-area { flex: none; display: block; container-type: normal; }
   .video-stage { width: 100%; }
-  .live-rail { min-width: 0; max-height: none; flex: 1; min-height: 0; display: flex; flex-direction: column; }
-  .rail-card:not(.chat-card) { max-height: 36vh; }
+  .live-rail { min-width: 0; max-height: none; flex: none; display: flex; flex-direction: column; }
+  .rail-card:not(.chat-card) { max-height: none; }
   .audio-strip { width: 100%; }
   .topbar-link { margin: 0 .6rem; }
-  .chat-card { flex: 1; min-height: 12rem; }
+  .chat-card { flex: none; min-height: 14rem; }
 }
 @media (max-width: 640px) {
   .topbar { padding: .6rem .9rem; }
   .live { padding: .8rem; gap: .75rem; }
   .video-stage { border-radius: var(--r-md); }
-  .live-badge { top: .5rem; left: .5rem; font-size: .72rem; padding: .22rem .62rem; }
-  .fs-btn { right: .5rem; bottom: .5rem; padding: .34rem .68rem .34rem .55rem; font-size: .74rem; }
   .audio-strip { gap: .5rem .8rem; }
   .strip-select { width: 7.5rem; }
   .student-actions .el-button { padding: .4rem .6rem; font-size: .78rem; }
@@ -1477,21 +1275,26 @@ onBeforeUnmount(() => {
   .topbar-link { margin: 0 .5rem; padding: .22rem .26rem .22rem .6rem; }
   .tl-url { display: none; }
   .entry { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+  /* 步骤页：手机上三列卡片太窄，改成单列横排（图标左、标题+说明右） */
+  .prep { padding: 1rem .9rem; }
+  .step-card { padding: 1.5rem 1.2rem; }
+  .step-head { gap: .75rem; margin-bottom: 1.4rem; }
+  .step-actions { margin-top: 1.4rem; }
+  .step-actions .el-button { min-width: 0; flex: 1; height: 2.7rem; font-size: .95rem; }
+  /* 直播开关在手机上别太占地方 */
+  .live-toggle { padding: .34rem .72rem .34rem .56rem; font-size: .76rem; }
+  /* 手机上控制条太挤：音量条让位（设备名本身够用） */
+  .audio-strip .vol-bar.sm { display: none; }
+  .audio-strip { gap: .5rem .7rem; padding: .6rem .8rem; }
+  /* 360 宽的老安卓放不下 6 个工具按钮，压缩间距和字号 */
+  .stage-tools { gap: .3rem; padding: .28rem .38rem; }
+  .stool { padding: .28rem .58rem; font-size: .74rem; }
+  .stool-gap { min-width: 0; }
 }
 
-/* 老安卓横屏：屏幕高度常常只有 320~400px，功能区按常规尺寸会把画面挤没。
-   这一档把顶栏/条带压薄、聊天最小高度放低，优先保住画面。 */
-@media (orientation: landscape) and (max-height: 500px) {
-  .topbar { padding: .35rem .9rem; }
-  .live { padding: .5rem .8rem .7rem; gap: .6rem; }
-  .live-main { gap: .6rem; }
-  .audio-strip { padding: .45rem .8rem; }
-  .rail-card { padding: .7rem .9rem; }
-  .chat-card { min-height: 8rem; }
-  .rail-card:not(.chat-card) { max-height: 30vh; }
-  .entry, .prep { padding: 1rem; }
-  .entry-card { padding: 1.4rem 1.2rem; }
-  .prep-card { padding: 1.2rem; }
-  .entry-steps { margin-top: 1rem; padding-top: 1rem; }
+/* 超窄屏（≤400px）：控制条里省略「麦克风/声音」标签文字，
+   否则「钢琴音质」会被裁成「琴音质」。下拉框自己会显示设备名，不影响理解。 */
+@media (max-width: 400px) {
+  .audio-strip .strip-label { display: none; }
 }
 </style>

@@ -1,5 +1,5 @@
 <template>
-  <div class="student">
+  <div class="student" :class="{ 'is-fs': immersive || nativeFs }">
     <!-- ═══ 顶栏 ═══ -->
     <header class="topbar">
       <div class="brand">
@@ -60,17 +60,20 @@
             <video ref="videoRef" autoplay playsinline></video>
             <div v-if="!connected" class="video-hint"><span class="spinner"></span>正在连接老师的画面…</div>
             <button v-if="needTap" class="resume-btn" @click="resumeVideo">▶ 点击继续播放</button>
-            <button v-if="!immersive" class="fs-btn" :class="{ on: nativeFs }" @click="toggleFullscreen"
-              :title="nativeFs ? '退出全屏（Esc）' : '全屏观看'">
-              <svg v-if="!nativeFs" viewBox="0 0 24 24" width="16" height="16" fill="none"
+            <button v-if="!nativeFs && !immersive" class="fs-btn" @click="toggleFullscreen" title="全屏观看">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none"
                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M9 4H4v5M15 4h5v5M15 20h5v-5M9 20H4v-5" />
               </svg>
-              <svg v-else viewBox="0 0 24 24" width="16" height="16" fill="none"
-                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M4 9h5V4M20 9h-5V4M20 15h-5v5M4 15h5v5" />
+              <span>全屏</span>
+            </button>
+            <!-- 退出按钮必须放在 .video-stage 内部：和 <video> 同级比较 z-index 才可靠。
+                 放到外面（哪怕 fixed + 更高 z-index）实测会被 video 拦截点击。 -->
+            <button v-if="immersive || nativeFs" class="stage-exit" @click="toggleFullscreen" title="退出全屏">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <path d="M6 6l12 12M18 6L6 18" />
               </svg>
-              <span>{{ nativeFs ? '退出全屏' : '全屏' }}</span>
             </button>
           </div>
         </div>
@@ -106,16 +109,6 @@
           </div>
         </div>
       </div>
-
-      <!-- 沉浸式全屏时的浮层：右下角圆形小按钮，画面之外不放其它东西 -->
-      <template v-if="immersive">
-        <button class="immersive-exit" @click="toggleFullscreen" title="退出全屏">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
-            stroke-linecap="round" stroke-linejoin="round">
-            <path d="M6 6l12 12M18 6L6 18" />
-          </svg>
-        </button>
-      </template>
 
       <!-- 右栏：桌面放「连线卡 + 公屏」，手机只放公屏 -->
       <div class="live-rail">
@@ -183,6 +176,7 @@ import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick, watch } 
 import { useRoute, useRouter } from 'vue-router'
 import { io } from 'socket.io-client'
 import SimplePeer from 'simple-peer'
+import { rtcConfig } from '../utils/rtc'
 import { ElMessage } from 'element-plus'
 
 const SERVER_URL = import.meta.env && import.meta.env.DEV ? 'http://localhost:3000' : undefined
@@ -199,9 +193,23 @@ const immersive = ref(false)    // CSS 沉浸式全屏中（无浏览器全屏�
 const chatScroll = ref(null)
 
 // 桌面/手机两套连线位置：桌面进右栏（公屏上方），手机留在画面正下方
-const isWide = ref(typeof window !== 'undefined' ? window.innerWidth >= 900 : true)
+// 「宽屏」= 宽度够放双列，或者横屏（横屏手机高度只有 ~390px，单列竖排必然溢出）。
+// 竖屏手机宽度窄、画面 16:9 只占一小条，下方正好留给聊天 → 单列。
+const WIDE_MQ = '(min-width: 900px), (min-width: 640px) and (orientation: landscape)'
+const isWide = ref(typeof window !== 'undefined' ? window.matchMedia(WIDE_MQ).matches : true)
 let wideMq = null
 function onWideChange(e) { isWide.value = e.matches }
+/* Chrome < 84 的 MediaQueryList 只有 addListener/removeListener */
+function bindWideMq() {
+    if (!wideMq) return
+    if (typeof wideMq.addEventListener === 'function') wideMq.addEventListener('change', onWideChange)
+    else if (typeof wideMq.addListener === 'function') wideMq.addListener(onWideChange)
+}
+function unbindWideMq() {
+    if (!wideMq) return
+    if (typeof wideMq.removeEventListener === 'function') wideMq.removeEventListener('change', onWideChange)
+    else if (typeof wideMq.removeListener === 'function') wideMq.removeListener(onWideChange)
+}
 
 // ── 基础状态 ──
 const hasJoined = ref(false)
@@ -220,7 +228,7 @@ const micOn = ref(false)
 // ── 聊天 ──
 const chatMessages = ref([])
 const chatInput = ref('')
-const emojis = ['😊', '💗', '😅', '😂', '🙋', '👏', '🤝']
+const emojis = ['😊', '💗', '😅', '😂', '🙋', '👏', '🤝', '🎁']
 
 // ── 音频设备 ──
 const audioDevices = reactive({ mics: [], speakers: [] })
@@ -281,11 +289,29 @@ function insertEmoji(e) {
 // 关键：必须按「舞台可用高度」反算，绝不能按「当前画面宽度」迭代，
 // 否则 width 变窄 → 可用高度变小 → 算出来更窄，会一路缩到底（自反馈死循环）。
 let liveRO = null
+
+/* 老款安卓（Chrome < 105 / 微信老 X5 内核）不支持 container-type + cqw/cqh，
+   也不支持 aspect-ratio（< 88），纯 CSS 算出来的画面尺寸会塌成 0。
+   这里用 JS 直接给画面写死 px，兼容一切 WebView；新浏览器同样走这条路，结果一致。 */
+function fitStage() {
+    const area = areaRef.value, stage = stageRef.value
+    if (!area || !stage) return
+    if (immersive.value || nativeFs.value) {
+        stage.style.width = ''; stage.style.height = ''
+        return
+    }
+    const aw = area.clientWidth, ah = area.clientHeight
+    if (aw < 40 || ah < 40) return
+    const w = Math.min(aw, ah * 16 / 9)
+    stage.style.width = Math.round(w) + 'px'
+    stage.style.height = Math.round(w * 9 / 16) + 'px'
+}
+
 function layoutLive() {
     const live = liveRef.value, area = areaRef.value, main = mainRef.value
     if (!live || !area || !main || !live.isConnected) return
-    if (immersive.value || nativeFs.value) return       // 全屏时画面铺满视口，不用算
-    if (window.innerWidth < 900) { main.style.width = ''; fitStageFallback(); return }  // 单列布局，交给 CSS
+    if (immersive.value || nativeFs.value) { fitStage(); return }       // 全屏时画面铺满视口，不用算
+    if (!isWide.value) { main.style.width = ''; fitStage(); return }  // 单列布局
     const availH = area.clientHeight
     if (availH < 120) return
     const cs = getComputedStyle(live)
@@ -297,18 +323,7 @@ function layoutLive() {
     const byWidth = Math.round(totalW - railIdeal - gap)
     const w = Math.max(320, Math.min(byHeight, byWidth))
     main.style.width = w + 'px'
-    fitStageFallback()
-}
-// 老安卓（Chrome < 88）不认 aspect-ratio，舞台高度会塌：用 JS 按 16:9 补显式高度；
-// 支持的浏览器清掉残留、不插手。layoutLive 在全屏时已提前返回，这里不会碰全屏尺寸。
-function fitStageFallback() {
-    const st = stageRef.value
-    if (!st) return
-    let ok = false
-    try { ok = !!(window.CSS && CSS.supports && CSS.supports('aspect-ratio: 16 / 9')) } catch (e) { ok = false }
-    if (ok) { if (st.style.height) st.style.height = ''; return }
-    const w = st.clientWidth
-    if (w > 0) st.style.height = Math.round(w * 9 / 16) + 'px'
+    fitStage()
 }
 function watchLiveLayout() {
     const live = liveRef.value
@@ -317,6 +332,9 @@ function watchLiveLayout() {
     if (liveRO) liveRO.disconnect()
     liveRO = new ResizeObserver(layoutLive)
     liveRO.observe(live)
+    // 也观察画面区：音频条从单行变两行时 .live 尺寸不变，只有 area 变矮，
+    // 不观察它就会一直用旧的可用高度（横屏手机上画面会莫名偏小）。
+    if (areaRef.value) liveRO.observe(areaRef.value)
     // 首帧音频条可能先换行再回单行，量两遍就稳了
     requestAnimationFrame(() => { layoutLive(); requestAnimationFrame(layoutLive) })
 }
@@ -333,16 +351,10 @@ function unwatchLiveLayout() {
 // 退出后视频被暂停、还可能被搬离播放框，只能手动点播放才能恢复。
 function fsElement() { return document.fullscreenElement || document.webkitFullscreenElement || null }
 
-/* stage-locked 反映「任一全屏中」：这个类会把顶栏/右栏/音频条全藏起来（见 CSS），
-   全屏时只剩画面本身——否则沉浸式下这些 UI 会从画面边缘露出来压住讲课内容 */
-function syncStageLock() {
-    document.documentElement.classList.toggle('stage-locked', immersive.value || nativeFs.value)
-}
 function setImmersive(on) {
     const next = !!on
     if (immersive.value === next) return
     immersive.value = next
-    syncStageLock()
     if (next) lockLandscape()
     else { unlockOrientation(); resumeVideoSoon(); nextTick(layoutLive) }
 }
@@ -361,24 +373,16 @@ async function toggleFullscreen() {
     if (immersive.value) { setImmersive(false); return }
 
     if (el.requestFullscreen || el.webkitRequestFullscreen) {
-        // 依次尝试：带参（藏导航栏）→ 无参 → webkit 老式。
-        // 老安卓 / 旧 WebView 不认带参调用会直接拒绝，以前就直接掉进沉浸式了；
-        // 多试一轮无参的，很多设备其实能进真全屏。
-        const attempts = []
-        if (el.requestFullscreen) {
-            attempts.push(() => el.requestFullscreen({ navigationUI: 'hide' }))
-            attempts.push(() => el.requestFullscreen())
-        }
-        if (el.webkitRequestFullscreen) attempts.push(() => el.webkitRequestFullscreen())
-        for (const go of attempts) {
-            try {
-                await go()
-                lockLandscape()
-                resumeVideoSoon()
-                return
-            } catch (e) { /* 换下一种试法 */ }
-        }
+        try {
+            if (el.requestFullscreen) await el.requestFullscreen({ navigationUI: 'hide' })
+            else await el.webkitRequestFullscreen()
+            // 全屏成功后锁方向，等浏览器完成过渡后再锁
+            lockLandscape()
+            resumeVideoSoon()
+            return
+        } catch (e) { /* 被拒 → 退回 CSS 沉浸式 */ }
     }
+    // iPhone/微信：不支持 requestFullscreen，用 CSS 沉浸式 + 手动锁向
     setImmersive(true)
 }
 
@@ -439,8 +443,8 @@ function bindVideoGuards() {
 function onVisibility() { if (!document.hidden) resumeVideoSoon() }
 function onFullscreenChange() {
     nativeFs.value = !!fsElement()
-    syncStageLock()
-    if (!nativeFs.value) unlockOrientation()
+    if (nativeFs.value) lockLandscape()      // 进入全屏后锁方向
+    else unlockOrientation()
     resumeVideoSoon()   // ← 关键：进出全屏都立刻续播
     nextTick(layoutLive)
 }
@@ -476,7 +480,6 @@ function toggleMic() {
     if (micStream) micStream.getAudioTracks().forEach(t => { t.enabled = micOn.value })
     socket.emit('toggle-mic', roomId.value)
 }
-
 function addMicToPeer() {
     if (!micStream) return
     if (peer && !peer.destroyed) {
@@ -652,7 +655,7 @@ function initializeConnection() {
     socket.on('signal', ({ from, signal }) => {
         try {
             if (!peer || peer.destroyed) {
-                peer = new SimplePeer({ initiator: false, trickle: false, objectMode: true, sdpTransform: s => s })
+                peer = new SimplePeer({ initiator: false, trickle: false, objectMode: true, sdpTransform: s => s, config: rtcConfig() })
                 peer.on('signal', data => socket.emit('signal', { to: from, from: socket.id, signal: data }))
                 peer.on('stream', s => {
                     lastStream = s
@@ -697,9 +700,10 @@ function retryConnection() { showErrorPage.value = false; initializeConnection()
 function goHome() { router.push('/') }
 function disconnectAll() {
     if (socket) socket.disconnect()
-    if (videoRef.value?.srcObject) {
-        videoRef.value.srcObject.getTracks().forEach(t => t.stop())
-        videoRef.value.srcObject = null
+    const v = videoRef.value
+    if (v?.srcObject) {
+        v.srcObject.getTracks().forEach(t => t.stop())
+        v.srcObject = null
     }
     if (peer) { try { peer.destroy() } catch (e) { }; peer = null }
     connected.value = false
@@ -710,16 +714,47 @@ watch(() => chatMessages.value.length, () => {
     nextTick(() => { const el = chatScroll.value; if (el) el.scrollTop = el.scrollHeight })
 })
 
+/* ── 老款安卓 / 老 WebView 能力探测 ──
+   ① MediaQueryList 在 Chrome < 84 只有 addListener/removeListener，没有 addEventListener，
+      直接调用会抛 TypeError 把整个 onMounted 打断（后面的设备枚举、布局全不执行）。
+   ② flex gap 在 Chrome < 84 无效 → 卡片会全贴在一起，加 .no-flex-gap 用 margin 兜底。
+   ③ backdrop-filter 在老安卓极耗性能 → 直接关掉。 */
+function detectLegacyWebView() {
+    const html = document.documentElement
+    // flex gap 检测：两个纵向子项，有 gap 时容器高度会多出 10px
+    try {
+        // 两个 0 高度的子项：支持 flex gap 时容器高 10px，不支持时 0px
+        const box = document.createElement('div')
+        box.style.cssText = 'position:absolute;left:-9999px;top:0;display:flex;flex-direction:column;gap:10px'
+        box.appendChild(document.createElement('div'))
+        box.appendChild(document.createElement('div'))
+        document.body.appendChild(box)
+        const supported = box.getBoundingClientRect().height >= 9
+        document.body.removeChild(box)
+        if (!supported) html.classList.add('no-flex-gap')
+    } catch (e) { html.classList.add('no-flex-gap') }
+    // backdrop-filter 检测
+    try {
+        const ok = CSS && CSS.supports &&
+            (CSS.supports('backdrop-filter', 'blur(1px)') || CSS.supports('-webkit-backdrop-filter', 'blur(1px)'))
+        if (!ok) html.classList.add('no-backdrop')
+    } catch (e) { html.classList.add('no-backdrop') }
+}
+
 onMounted(async () => {
+    detectLegacyWebView()
     document.addEventListener('fullscreenchange', onFullscreenChange)
     document.addEventListener('webkitfullscreenchange', onFullscreenChange)
     document.addEventListener('visibilitychange', onVisibility)
     document.addEventListener('keydown', onKeydown)
-    wideMq = window.matchMedia('(min-width: 900px)')
+    wideMq = window.matchMedia(WIDE_MQ)
     isWide.value = wideMq.matches
-    wideMq.addEventListener('change', onWideChange)
+    bindWideMq()
     await getAudioDevices()
-    navigator.mediaDevices.addEventListener('devicechange', getAudioDevices)
+    try {
+        if (navigator.mediaDevices && navigator.mediaDevices.addEventListener)
+            navigator.mediaDevices.addEventListener('devicechange', getAudioDevices)
+    } catch (e) { /* 老浏览器没有 devicechange，忽略 */ }
 })
 onBeforeUnmount(() => {
     socketClosed = true
@@ -727,10 +762,10 @@ onBeforeUnmount(() => {
     document.removeEventListener('webkitfullscreenchange', onFullscreenChange)
     document.removeEventListener('visibilitychange', onVisibility)
     document.removeEventListener('keydown', onKeydown)
-    if (wideMq) wideMq.removeEventListener('change', onWideChange)
+    try { if (navigator.mediaDevices) navigator.mediaDevices.removeEventListener('devicechange', getAudioDevices) } catch (_) {}
+    unbindWideMq()
     if (fsElement()) { try { (document.exitFullscreen || document.webkitExitFullscreen).call(document) } catch (e) { } }
-    setImmersive(false)
-    document.documentElement.classList.remove('stage-locked')
+    immersive.value = false
     unlockOrientation()
     unwatchLiveLayout()
     disconnectAll()
@@ -740,7 +775,21 @@ onBeforeUnmount(() => {
 <style scoped>
 /* 兜底顺序很讲究：老 WebView 认 100vh 不认 100dvh；新浏览器（地址栏伸缩）认 100dvh。
    最后写 dvh，认它的支持它；不支持的机型就停在前面的 100% 兜底上，保证永远有高度。 */
-.student { width: 100%; min-height: 100%; min-height: 100vh; min-height: calc(var(--vh, 1vh) * 100); min-height: 100dvh; display: flex; flex-direction: column; }
+.student { width: 100%; min-height: 100%; min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; }
+
+/* ═══ 老款安卓降级（由 detectLegacyWebView() 打上 class）═══
+   flex gap 在 Chrome < 84 无效，卡片会全贴在一起 → 用 margin 顶替 */
+.no-flex-gap .live-rail > * + * { margin-top: 1rem; }
+.no-flex-gap .live-main > * + * { margin-top: .75rem; }
+.no-flex-gap .live > * + * { margin-top: 1rem; }
+.no-flex-gap .audio-bar > * + * { margin-left: .6rem; }
+.no-flex-gap .connect-zone > * + * { margin-left: .6rem; }
+.no-flex-gap .error-actions > * + * { margin-left: .8rem; }
+/* backdrop-filter 在老安卓极耗性能（还会闪）→ 直接换实色背景 */
+.no-backdrop .topbar {
+  backdrop-filter: none; -webkit-backdrop-filter: none;
+  background: #0D1117;
+}
 
 /* ═══ 顶栏 ═══ */
 .topbar {
@@ -820,15 +869,15 @@ onBeforeUnmount(() => {
   background: #05070A; border-color: #222D3D;
   overflow: hidden; display: block;
 }
-/* contain：保证源画面完整显示。源是浏览器标签页/窗口时，比例由窗口大小决定、
-   往往不是 16:9，用 cover 会把贴边的内容（琴键、工具栏）裁掉；contain 只留黑边，
-   黑边与舞台黑底一体，不影响观看。源正好 16:9 时两者等效。 */
+/* contain：完整显示不裁切（源常是浏览器标签页、比例不定，cover 会把贴边内容裁掉） */
 .video-stage video {
   display: block; width: 100%; height: 100%;
   object-fit: contain; background: #05070A;
 }
 .video-hint {
-  position: absolute; top: 0; right: 0; bottom: 0; left: 0; inset: 0; display: flex; align-items: center; justify-content: center;
+  /* 不用 inset：老安卓 WebView（Chrome < 87）不认 */
+  position: absolute; top: 0; right: 0; bottom: 0; left: 0;
+  display: flex; align-items: center; justify-content: center;
   gap: .7rem; color: var(--text-2); font-size: .95rem; pointer-events: none;
 }
 .spinner {
@@ -848,86 +897,45 @@ onBeforeUnmount(() => {
   backdrop-filter: blur(8px); transition: all .15s;
 }
 .fs-btn:hover { color: var(--gold); border-color: var(--gold-line); background: rgba(10,14,20,.92); }
-.fs-btn.on { color: var(--gold); border-color: var(--gold-line); }
 
-/* 全屏（原生或沉浸式）期间，课堂的其它 UI 一律藏起来，只剩画面本身：
-   顶栏是 sticky 定位，沉浸式下会从画面边缘露出来——横屏时它正好压在画面左侧，
-   把讲课内容挡住一条。这里在 stage-locked 期间把它们全部 display:none */
-html.stage-locked .topbar,
-html.stage-locked .live-rail,
-html.stage-locked .audio-bar,
-html.stage-locked .connect-zone { display: none !important; }
-html.stage-locked .student { background: #000; }
-html.stage-locked .live { padding: 0; gap: 0; }
-html.stage-locked .live-main { gap: 0; }
-
-/* 全屏：两种模式共用「铺满视口」的样式
-   ① 浏览器全屏 → :fullscreen  ② CSS 沉浸式 → .immersive（iPhone / 应用内浏览器） */
+/* 全屏：两种模式共用「铺满视口 + 最上层」的样式
+   ① 浏览器全屏 → :fullscreen  ② CSS 沉浸式 → .immersive（iPhone / 应用内浏览器）
+   同时 .is-fs 加在 .student 上，让顶栏和右栏在两种全屏模式下都消失 */
 .video-stage:fullscreen,
 .video-stage:-webkit-full-screen,
 .video-stage.immersive {
   position: fixed;
-  left: 50%; top: 50%;
+  left: 0; top: 0;
   width: 100vw; height: 100vh;
-  width: calc(var(--vw, 1vw) * 100); height: calc(var(--vh, 1vh) * 100);
   width: 100dvw; height: 100dvh;
   max-width: none; max-height: none;
   aspect-ratio: auto;
   margin: 0; border: 0; border-radius: 0;
   background: #000;
-  z-index: 9998;
-  transform: translate(-50%, -50%);
+  z-index: 10001;
 }
-/* 全屏时画面用 contain —— 宁可两侧留黑边，也不裁掉讲课内容。
-   视频四边钉死舞台并占满舞台层，任何栏/条都不能压住画面边缘 */
 .video-stage:fullscreen video,
 .video-stage:-webkit-full-screen video,
-.video-stage.immersive video {
-  object-fit: contain;
-  position: absolute; inset: 0; width: 100%; height: 100%;
-}
+.video-stage.immersive video { object-fit: contain; }
 .video-stage::backdrop { background: #000; }
 
-/* 原生全屏里只保留一个小圆退出钮（沉浸式用 .immersive-exit）：去掉文字、半透明，
-   贴安全区角落，不压画面主体 */
-.video-stage:fullscreen .fs-btn,
-.video-stage:-webkit-full-screen .fs-btn {
-  width: 2.4rem; height: 2.4rem; padding: 0; justify-content: center;
-  border-radius: 50%; opacity: .82;
-  right: calc(env(safe-area-inset-right, 0px) + .6rem);
-  bottom: calc(env(safe-area-inset-bottom, 0px) + .6rem);
-}
-.video-stage:fullscreen .fs-btn span,
-.video-stage:-webkit-full-screen .fs-btn span { display: none; }
+/* 全屏时隐藏顶栏和右栏，只留视频 + 退出按钮（与部署版统一：强制隐藏 + 黑底 + 内容区不留边距） */
+.student.is-fs { background: #000; }
+.student.is-fs .live, .student.is-fs .live-main { padding: 0; gap: 0; }
+.student.is-fs .topbar,
+.student.is-fs .live-rail,
+.student.is-fs .connect-zone,
+.student.is-fs .audio-bar { display: none !important; }
 
-/* 全屏就是「干净看画面」：连接提示一律收起，只留视频本身和退出按钮 */
+/* 全屏时隐藏连接提示（在框内，不需要） */
 .video-stage:fullscreen .video-hint,
 .video-stage:-webkit-full-screen .video-hint,
 .video-stage.immersive .video-hint { display: none; }
 
-/* 竖着拿手机又没进真全屏（拿不到方向锁定）：把画面转 90°，
-   用户把手机横过来就是满屏，不用等系统转屏。只对触屏生效，桌面不动。 */
-@media (orientation: portrait) {
-  html.is-touch .video-stage.immersive {
-    width: 100vh; height: 100vw;
-    width: calc(var(--vh, 1vh) * 100); height: calc(var(--vw, 1vw) * 100);
-    width: 100dvh; height: 100dvw;
-    transform: translate(-50%, -50%) rotate(90deg);
-  }
-  /* 原生全屏同理：方向锁定没生效的老安卓，竖屏进全屏也转 90°，横过来即满屏 */
-  html.is-touch .video-stage:fullscreen,
-  html.is-touch .video-stage:-webkit-full-screen {
-    width: 100vh; height: 100vw;
-    width: calc(var(--vh, 1vh) * 100); height: calc(var(--vw, 1vw) * 100);
-    width: 100dvh; height: 100dvw;
-    transform: translate(-50%, -50%) rotate(90deg);
-  }
-}
-
-/* 沉浸式下的浮层（在旋转容器外面，永远正着）——整个全屏里只有这一个控件。
-   放右下角、做小一点（图标按钮），不挡画面主体；转 90° 后仍能按到。 */
-.immersive-exit {
-  position: fixed; z-index: 10000;
+/* 退出按钮：绝对定位在画面右下角（全屏时画面=视口，就落在屏幕右下角）。
+   z-index 只需压过同级的 <video> 和 .video-hint，不用跟外层抢层级。 */
+.stage-exit {
+  position: absolute; z-index: 20;
   bottom: calc(env(safe-area-inset-bottom, 0px) + .9rem);
   right: calc(env(safe-area-inset-right, 0px) + .9rem);
   display: inline-flex; align-items: center; justify-content: center;
@@ -939,9 +947,9 @@ html.stage-locked .live-main { gap: 0; }
   box-shadow: 0 3px 12px rgba(0,0,0,.5);
   opacity: .95; transition: filter .15s, transform .1s;
 }
-.immersive-exit svg { width: 1.15rem; height: 1.15rem; }
-.immersive-exit:hover,
-.immersive-exit:active { filter: brightness(1.2); transform: scale(.96); }
+.stage-exit svg { width: 1.15rem; height: 1.15rem; }
+.stage-exit:hover,
+.stage-exit:active { filter: brightness(1.2); transform: scale(.96); }
 
 /* 浏览器把播放拦下来时的兜底：给一个明确可点的按钮，而不是让用户猜 */
 .resume-btn {
@@ -1072,9 +1080,26 @@ html.stage-locked .live-main { gap: 0; }
 .chat-title { font-size: 1.05rem; font-weight: 600; }
 .chat-scroll { flex: 1; overflow-y: auto; min-height: 0; padding: .2rem; -webkit-overflow-scrolling: touch; }
 .chat-empty { color: var(--text-3); font-size: .85rem; text-align: center; padding: 2rem .5rem; }
-.chat-input-row { display: flex; gap: .5rem; margin-top: .7rem; flex-shrink: 0; }
-.chat-input-row .el-input { flex: 1; }
-.emoji-row { margin-top: .55rem; }
+/* 聊天输入：不用 flex gap（老安卓 WebView 不认），用 margin 兜底 */
+.chat-input-row { display: flex; margin-top: .7rem; flex-shrink: 0; align-items: center; }
+.chat-input-row .el-input { flex: 1; min-width: 0; }
+.chat-input-row .el-button { margin-left: .5rem; flex-shrink: 0; }
+.emoji-row {
+  margin-top: .55rem; display: grid; grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: .3rem; flex-shrink: 0;
+}
+.emoji-btn {
+  width: 100%; height: 2.1rem;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--line-2); border-radius: var(--r-md);
+  background: var(--panel-2); font-size: 1.05rem; line-height: 1;
+  font-family: inherit; cursor: pointer; padding: 0;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform .12s, border-color .15s, background .15s;
+}
+.emoji-btn:hover, .emoji-btn:active {
+  border-color: var(--gold-line); background: var(--panel-3); transform: scale(1.08);
+}
 .msg-row.mine .msg-name { color: var(--gold); }
 .msg-row.mine .msg-bubble {
   background: var(--gold-soft); border-color: var(--gold-line); color: #F4E3C2;
@@ -1095,21 +1120,17 @@ html.stage-locked .live-main { gap: 0; }
 .error-actions { display: flex; gap: .8rem; justify-content: center; }
 .error-actions .el-button { flex: 1; }
 
-/* ═══ 桌面端：页面锁定视口高度，只有聊天栏内部滚动 ═══ */
-@media (min-width: 900px) {
-  .student { height: 100vh; height: calc(var(--vh, 1vh) * 100); height: 100dvh; overflow: hidden; }
+/* ═══ 双列（桌面 / 横屏手机平板）：页面锁定视口高度，只有聊天栏内部滚动 ═══ */
+@media (min-width: 900px), (min-width: 640px) and (orientation: landscape) {
+  .student { height: 100dvh; overflow: hidden; }
   .entry { overflow-y: auto; }
 }
 
-/* ═══ 平板（单列）+ 手机（≤899px）：锁视口高、画面完整、聊天吃满剩余 ═══
+/* ═══ 竖屏（平板 + 手机）/ 极窄屏：单列，锁视口高、画面完整、聊天吃满剩余 ═══
    竖屏手机（宽度窄）画面 16:9 必然比聊天矮，下方剩余高度让给聊天区。
-   - .student 锁满视口、自己不滚
-   - .live 锁高成唯一滚动容器（聊天/连线/音频都在其中，页面不被拉长）
-   - 画面 stage-area 正常流（不 sticky，避免高度塌成 0 和中间空白）
-   - 聊天 .chat-card 吃掉剩余高度（竖屏时≈60% 视口），内部再滚
-   根容器补 100%/100vh/100dvh 三级兜底，低端安卓取不到 dvh 也有高度。 */
-@media (max-width: 899px) {
-  .student { height: 100%; height: 100vh; height: calc(var(--vh, 1vh) * 100); height: 100dvh; overflow: hidden; }
+   横屏手机不走这里 —— 它高度只有 ~390px，单列竖排必然把聊天挤出视口。 */
+@media (max-width: 899px) and (orientation: portrait), (max-width: 639px) {
+  .student { height: 100%; height: 100vh; height: 100dvh; overflow: hidden; }
   .live {
     flex: 1; min-height: 0; flex-direction: column;
     overflow-y: auto; -webkit-overflow-scrolling: touch;
@@ -1134,8 +1155,7 @@ html.stage-locked .live-main { gap: 0; }
 }
 
 /* ═══ 手机（≤640px）：更紧凑 ═══ */
-@media (max-width: 640px) {
-  .topbar { padding: .55rem .8rem; }
+@media (max-width: 640px) {  .topbar { padding: .55rem .8rem; }
   .live { padding: .6rem; gap: .6rem; }
   .live-main { gap: .6rem; }
   .video-stage { border-radius: var(--r-md); }
@@ -1150,26 +1170,30 @@ html.stage-locked .live-main { gap: 0; }
   .chat-card { min-height: 12rem; }
   .entry-card { padding: 2rem 1.4rem; }
   .entry-steps { gap: .8rem; }
-  .emoji-btn { width: 2.6rem; height: 2.6rem; }
+  .emoji-btn { height: 2rem; font-size: .98rem; }
   /* 进入页在锁高容器里也要能滚 */
   .entry { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; }
 }
 
-/* ═══ 平板（641–899px）：竖屏 4:3，画面按宽度限到 72%，给聊天让高度 ═══ */
-@media (min-width: 641px) and (max-width: 899px) {
+/* ═══ 竖屏平板（641–899px）：4:3 屏，画面按宽度限到 72%，给聊天让高度 ═══ */
+@media (min-width: 641px) and (max-width: 899px) and (orientation: portrait) {
   .video-stage { width: 72%; margin: 0 auto; }
 }
 
-/* 老安卓横屏：屏幕高度常常只有 320~400px，功能区按常规尺寸会把画面和聊天挤没。
-   这一档把顶栏/按钮压薄、聊天最小高度放低，优先保住画面。 */
-@media (orientation: landscape) and (max-height: 500px) {
-  .topbar { padding: .35rem .8rem; }
-  .live { padding: .5rem .6rem; gap: .5rem; }
+/* ═══ 横屏手机（矮屏 ≤520px）：高度只有 ~390px，一切压扁，画面优先 ═══
+   音频条一旦换行会吃掉 90px，把画面挤到只剩 193px 高 → 强制单行。 */
+@media (orientation: landscape) and (max-height: 520px) {
+  .live { padding: .5rem .7rem .6rem; gap: .6rem; }
   .live-main { gap: .5rem; }
-  .connect-btn { min-height: 2.6rem; }
-  .mute-btn { min-height: 2.6rem; }
-  .chat-card { min-height: 7rem; }
-  .entry { padding: 1rem; }
-  .entry-card { padding: 1.4rem 1.2rem; }
+  .audio-bar {
+    padding: .28rem .5rem; gap: .4rem .7rem;
+    flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden;
+  }
+  .audio-bar .audio-group.hide-m { display: none; }   /* 矮屏只留麦克风，扬声器用系统默认 */
+  .audio-select { width: 6rem; }
+  .audio-label { font-size: .74rem; }
+  .vol-bar.sm { display: none; }
+  .connect-card { padding: .45rem .6rem; }
+  .chat-card { min-height: 0; }
 }
 </style>
