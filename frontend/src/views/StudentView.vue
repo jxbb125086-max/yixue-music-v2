@@ -67,14 +67,10 @@
               </svg>
               <span>全屏</span>
             </button>
-            <!-- 退出按钮必须放在 .video-stage 内部：和 <video> 同级比较 z-index 才可靠。
-                 放到外面（哪怕 fixed + 更高 z-index）实测会被 video 拦截点击。 -->
-            <button v-if="immersive || nativeFs" class="stage-exit" @click="toggleFullscreen" title="退出全屏">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
-                stroke-linecap="round" stroke-linejoin="round">
-                <path d="M6 6l12 12M18 6L6 18" />
-              </svg>
-            </button>
+            <!-- 全屏中唯一的退出入口：不用 ✕ 图标（学员容易跟关页面的叉混淆、误触），
+                 直接用「返回大厅」文字说明。必须放在 .video-stage 内部：和 <video>
+                 同级比较 z-index 才可靠，放外面实测会被 video 拦截点击。 -->
+            <button v-if="immersive || nativeFs" class="stage-exit" @click="toggleFullscreen" title="返回大厅">返回大厅</button>
           </div>
         </div>
 
@@ -939,15 +935,14 @@ onBeforeUnmount(() => {
   bottom: calc(env(safe-area-inset-bottom, 0px) + .9rem);
   right: calc(env(safe-area-inset-right, 0px) + .9rem);
   display: inline-flex; align-items: center; justify-content: center;
-  width: 2.9rem; height: 2.9rem;
-  border-radius: 50%; border: 1.5px solid var(--gold-line);
+  padding: .6rem 1.15rem;
+  border-radius: 999px; border: 1.5px solid var(--gold-line);
   background: rgba(10,14,20,.82); color: var(--gold);
-  font-size: 1.15rem; font-family: inherit; cursor: pointer;
+  font-size: .95rem; font-weight: 600; font-family: inherit; cursor: pointer;
   backdrop-filter: blur(8px);
   box-shadow: 0 3px 12px rgba(0,0,0,.5);
   opacity: .95; transition: filter .15s, transform .1s;
 }
-.stage-exit svg { width: 1.15rem; height: 1.15rem; }
 .stage-exit:hover,
 .stage-exit:active { filter: brightness(1.2); transform: scale(.96); }
 
