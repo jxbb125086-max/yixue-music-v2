@@ -85,19 +85,6 @@
             </el-select>
           </div>
 
-          <div class="field">
-            <div class="field-label">🎹 声音模式</div>
-            <div class="mode-cards">
-              <div class="mode-card" :class="{ active: isMusicMode }" @click="setMusicMode(true)">
-                <b>钢琴音质</b>
-                <span>不加工、原样传输，弹琴音色最好</span>
-              </div>
-              <div class="mode-card" :class="{ active: !isMusicMode }" @click="setMusicMode(false)">
-                <b>说话音质</b>
-                <span>降噪更清晰，适合讲话多的时候</span>
-              </div>
-            </div>
-          </div>
 
           <div class="step-actions">
             <el-button class="btn-ghost" size="large" @click="stage = 'entry'">← 返回</el-button>
@@ -158,12 +145,6 @@
               <el-option v-for="d in audioDevices.speakers" :key="d.deviceId"
                 :label="d.label || '扬声器 ' + (audioDevices.speakers.indexOf(d)+1)" :value="d.deviceId" />
             </el-select>
-          </div>
-          <div class="strip-group no-shrink">
-            <span class="strip-label">声音</span>
-            <el-button size="small" class="btn-ghost" @click="toggleAudioMode">
-              {{ isMusicMode ? '🎵 钢琴音质' : '🗣️ 说话音质' }}
-            </el-button>
           </div>
           <el-button class="strip-rec" size="small" :class="isRecording ? 'btn-danger-ghost' : 'btn-ghost'"
             @click="isRecording ? stopRecording() : startRecording()">
@@ -296,7 +277,6 @@ const selectedMic = ref('')
 const selectedSpeaker = ref('')
 const testingMic = ref(false)
 const micVolume = ref(0)
-const isMusicMode = ref(localStorage.getItem('mc_audio_mode') !== 'voice')
 
 // 网络 & 媒体
 let socket = null
@@ -413,14 +393,25 @@ function stopStudentAudio(id) {
 }
 
 // ── 音频设备（与部署版统一的逻辑）──
+/* 音乐模式 SDP：把 Opus 协商参数拉到立体声 + 256kbps 高码率，
+   否则浏览器默认偏低码率，琴声会糊；人声走这套参数也更透。 */
+function musicSdpTransform(sdp) {
+    const lines = sdp.split('\r\n')
+    let opusPt = null
+    for (const line of lines) { const m = line.match(/^a=rtpmap:(\d+) opus\/48000/); if (m) { opusPt = m[1]; break } }
+    if (!opusPt) return sdp
+    const fmtp = 'a=fmtp:' + opusPt + ' minptime=10;useinbandfec=1;stereo=1;sprop-stereo=1;maxaveragebitrate=256000;maxplaybackrate=48000;cbr=0'
+    let done = false
+    for (let i = 0; i < lines.length; i++) { if (lines[i].startsWith('a=fmtp:' + opusPt)) { lines[i] = fmtp; done = true; break } }
+    if (!done) for (let i = 0; i < lines.length; i++) { if (lines[i].startsWith('a=rtpmap:' + opusPt)) { lines.splice(i + 1, 0, fmtp); break } }
+    return lines.join('\r\n')
+}
+
 function micConstraints() {
     const base = selectedMic.value ? { deviceId: { exact: selectedMic.value } } : {}
-    if (isMusicMode.value) {
-        // 音乐模式只关降噪和自动增益（那两个会吃钢琴的音色与强弱），回声消除必须留着：
-        // 学员的声音从老师扬声器放出来会被麦克风录回去，学员就会听见自己的回声
-        return { audio: { ...base, echoCancellation: true, noiseSuppression: false, autoGainControl: false } }
-    }
-    return { audio: { ...base, echoCancellation: true, noiseSuppression: true, autoGainControl: true } }
+    // 固定音乐模式（不做选择）：降噪和自动增益关掉（那两个会吃钢琴的音色与强弱），
+    // 回声消除必须留着：学员的声音从老师扬声器放出来会被麦克风录回去，学员就会听见自己的回声
+    return { audio: { ...base, echoCancellation: true, noiseSuppression: false, autoGainControl: false } }
 }
 /* 取麦克风流：指定的设备已拔掉时 exact 约束会直接失败，回退到默认设备，别让整堂课没声 */
 async function getMicStream() {
@@ -433,15 +424,6 @@ async function getMicStream() {
         throw e
     }
 }
-function setMusicMode(v) { if (isMusicMode.value !== v) toggleAudioMode() }
-async function toggleAudioMode() {
-    isMusicMode.value = !isMusicMode.value
-    localStorage.setItem('mc_audio_mode', isMusicMode.value ? 'music' : 'voice')
-    ElMessage.success(isMusicMode.value ? '🎵 已切换钢琴音质（保真）' : '🗣️ 已切换说话音质（降噪）')
-    // 模式变了约束就变了：重新取流并热换进课堂（旧版只换了检测流，课上其实没生效）
-    try { applyMicStreamToClass(await getMicStream()) } catch (e) { console.warn('模式切换重取麦克风失败', e) }
-}
-
 async function getAudioDevices() {
     try {
         const temp = await navigator.mediaDevices.getUserMedia({ audio: true })
@@ -463,7 +445,7 @@ async function startTeacherMicDetection() {
 
 /* 把一条新麦克风流接进当前状态：音量检测改用新流；直播中把每个学员连接的
    音频发送轨直接换成新轨（replaceTrack，不用重协商），peerStream 同步更新——
-   这样课中切麦克风/切声音模式立刻生效（旧版把新轨加进没人发送的共享流里，等于没切） */
+   这样课中切麦克风立刻生效（旧版把新轨加进没人发送的共享流里，等于没切） */
 function applyMicStreamToClass(s) {
     if (teacherMicStream && teacherMicStream !== s) teacherMicStream.getTracks().forEach(t => t.stop())
     teacherMicStream = s
@@ -818,7 +800,7 @@ function connectToStudent(id) {
     if (peers[id]) return
     const peer = new SimplePeer({
         initiator: true, trickle: false, stream: peerStream, objectMode: true,
-        sdpTransform: s => s, config: rtcConfig()
+        sdpTransform: musicSdpTransform, config: rtcConfig()
     })
     peer.on('signal', sig => socket.emit('signal', { to: id, from: socket.id, signal: sig }))
     peer.on('stream', s => {

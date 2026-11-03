@@ -505,11 +505,26 @@ async function getAudioDevices() {
         await startMicDetection()
     } catch (e) { console.error('获取设备失败', e) }
 }
+/* 音乐模式 SDP：把 Opus 协商参数拉到立体声 + 256kbps 高码率，
+   否则浏览器默认偏低码率，琴声会糊；人声走这套参数也更透。 */
+function musicSdpTransform(sdp) {
+    const lines = sdp.split('\r\n')
+    let opusPt = null
+    for (const line of lines) { const m = line.match(/^a=rtpmap:(\d+) opus\/48000/); if (m) { opusPt = m[1]; break } }
+    if (!opusPt) return sdp
+    const fmtp = 'a=fmtp:' + opusPt + ' minptime=10;useinbandfec=1;stereo=1;sprop-stereo=1;maxaveragebitrate=256000;maxplaybackrate=48000;cbr=0'
+    let done = false
+    for (let i = 0; i < lines.length; i++) { if (lines[i].startsWith('a=fmtp:' + opusPt)) { lines[i] = fmtp; done = true; break } }
+    if (!done) for (let i = 0; i < lines.length; i++) { if (lines[i].startsWith('a=rtpmap:' + opusPt)) { lines.splice(i + 1, 0, fmtp); break } }
+    return lines.join('\r\n')
+}
+
 function stuMicConstraints() {
     const dev = selectedMic.value ? { deviceId: { exact: selectedMic.value } } : {}
-    // 学员是纯人声：回声消除/降噪/自动增益全开——不然老师的声音从学员扬声器出来
-    // 会被学员麦克风原样录回去，老师听见自己的回声、严重时还会来回激荡啸叫
-    return { audio: { ...dev, echoCancellation: true, noiseSuppression: true, autoGainControl: true } }
+    // 固定音乐模式（与老师端一致、不做选择）：学员也要弹琴给老师听，降噪/自动增益会吃琴声，一律关；
+    // 回声只靠 echoCancellation 挡：老师的声音从学员扬声器放出来时，EC 会把它从麦克风信号里消掉。
+    // 外放音量特别大又离麦很近时仍可能有残余回声，戴耳机最稳妥。
+    return { audio: { ...dev, echoCancellation: true, noiseSuppression: false, autoGainControl: false } }
 }
 /* 取麦克风流：指定的设备已拔掉时 exact 约束会直接失败，回退到默认设备 */
 async function getStuMicStream() {
@@ -651,7 +666,7 @@ function initializeConnection() {
     socket.on('signal', ({ from, signal }) => {
         try {
             if (!peer || peer.destroyed) {
-                peer = new SimplePeer({ initiator: false, trickle: false, objectMode: true, sdpTransform: s => s, config: rtcConfig() })
+                peer = new SimplePeer({ initiator: false, trickle: false, objectMode: true, sdpTransform: musicSdpTransform, config: rtcConfig() })
                 peer.on('signal', data => socket.emit('signal', { to: from, from: socket.id, signal: data }))
                 peer.on('stream', s => {
                     lastStream = s
