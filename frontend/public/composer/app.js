@@ -231,6 +231,7 @@ function acquireCamera(f, body) {
       const v = document.createElement('video');
       v.autoplay = true; v.playsInline = true; v.muted = true;
       v.style.objectFit = 'contain';   // 正常模式用contain保留黑边，直播时CSS覆盖为cover
+      v.style.transform = 'scaleX(-1)';   // 镜头镜像：老师看画面时左右与自身动作一致（学生端同步镜像）
       v.srcObject = stream;
       body.appendChild(v);
       f.stream = stream;
